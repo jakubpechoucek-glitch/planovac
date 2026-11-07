@@ -1,6 +1,6 @@
 -- Plánovač: tabulky a pravidla přístupu
 -- V Supabase (projekt Rozcestníku unoefgbzymlwwehgzusf) aplikováno 7. 11. 2026
--- jako migrace planovac_tabulky, planovac_volno_cesta planovac_sluzebni_cesta, planovac_vyuka_pres_svatek a planovac_varianty_destinaci (7. 11. 2026).
+-- jako migrace planovac_tabulky, planovac_volno_cesta planovac_sluzebni_cesta, planovac_vyuka_pres_svatek, planovac_varianty_destinaci a planovac_lety (7. 11. 2026).
 -- Pozn.: původní plan_hlasy (hlas k celé cestě, s komentářem) nahradila migrace planovac_varianty_destinaci – viz konec souboru.
 -- Funkce je_clen() a moje_jmeno() a tabulka clenove pochází z Rozcestníku.
 
@@ -191,3 +191,8 @@ create policy "svuj hlas"         on public.plan_hlasy for insert to authenticat
 create policy "svuj hlas uprava"  on public.plan_hlasy for update to authenticated using (je_clen() and kdo = moje_jmeno()) with check (je_clen());
 create policy "svuj hlas smazani" on public.plan_hlasy for delete to authenticated using (je_clen() and kdo = moje_jmeno());
 -- (převod 2 existujících cest: Ischgl → varianta 🇦🇹 Rakousko / Ischgl; otázka u únorového termínu → poznámka)
+
+-- ── Migrace planovac_lety ──
+-- lety u cesty: [{"datum": "2026-12-01", "text": "TG621 MNL → BKK 13:10–15:45"}, …]
+-- v Přehledu je den s letem označený ✈ a detail je v bublině
+alter table public.plan_volno add column lety jsonb not null default '[]'::jsonb;

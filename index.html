@@ -285,6 +285,21 @@
       font-size: .85rem; box-shadow: var(--shadow); z-index: 50; max-width: calc(100vw - 32px);
     }
     .toast.err { background: var(--red); }
+    /* bublina s detailem dne v kalendáři (najetí myší, na mobilu klepnutí) */
+    .bublina {
+      position: fixed; z-index: 60; pointer-events: none; display: none;
+      background: var(--text); color: #fff; padding: 7px 10px; border-radius: 8px;
+      font-size: .78rem; line-height: 1.35; white-space: pre-line; max-width: min(320px, calc(100vw - 24px));
+      box-shadow: var(--shadow);
+    }
+    .bublina.vidi { display: block; }
+    .cell.let { position: relative; }
+    .cell.let::after {
+      content: '✈'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: #fff; text-shadow: 0 0 2px #000;
+    }
+    .lety-radek { display: grid; grid-template-columns: 140px 1fr auto; gap: 6px; margin-bottom: 6px; }
+    .lety-radek input { min-width: 0; }
     .demo-banner { background: #fde68a; color: #1c1c1e; text-align: center; font-size: .85rem; font-weight: 600; padding: 6px 16px; }
     .loading { text-align: center; color: var(--muted); padding: 40px; font-size: .9rem; }
   </style>
@@ -337,6 +352,11 @@
       </select>
     </label>
     <label>Popis / kam <input name="popis" placeholder="např. Podzimní prázdniny, Singapur – konference, Praha"></label>
+    <div id="volno-lety">
+      <label style="margin-bottom:4px">Lety <span style="font-weight:400">– v kalendáři ✈ s bublinou u daného dne</span></label>
+      <div id="lety-radky"></div>
+      <button type="button" class="btn small ghost" id="pridat-let">+ Přidat let</button>
+    </div>
     <div class="hint" id="volno-hint"></div>
     <div class="actions">
       <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
@@ -477,7 +497,8 @@ function demoData() {
   volno.push(v('jana', d(y, 11, 16), d(y, 11, 19), 'sluzebni', 'Singapur – konference'));
   volno.push(v('jana', d(y + 1, 2, 8), d(y + 1, 2, 12), 'sluzebni', 'Ho Či Minovo Město'));
   volno.push(v('matej', d(y + 1, 2, 15), d(y + 1, 2, 19), 'skola', 'Reading week'));
-  volno.push(v('matej', d(y + 1, 2, 13), d(y + 1, 2, 21), 'cesta', 'Praha – babička a děda'));
+  volno.push({ ...v('matej', d(y + 1, 2, 13), d(y + 1, 2, 21), 'cesta', 'Praha – babička a děda'),
+    lety: [{ datum: d(y + 1, 2, 13), text: 'BA LHR → PRG 18:05–21:05' }, { datum: d(y + 1, 2, 21), text: 'BA PRG → LHR 11:10–12:30' }] });
   const svatky = [];
   for (const yy of [y, y + 1, y + 2]) {
     for (const [m, dd, n] of [[1, 1, 'Nový rok'], [5, 1, 'Svátek práce'], [6, 12, 'Den nezávislosti'], [11, 1, 'Všech svatých'], [11, 30, 'Bonifacio Day'], [12, 8, 'Neposkvrněné početí'], [12, 25, 'Vánoce'], [12, 30, 'Rizal Day'], [12, 31, 'Silvestr']]) {
@@ -590,8 +611,16 @@ function prepocti() {
       m.get(s).push(r);
     }
   }
+  // lety: osoba → datum → [text]
+  const lety = Object.fromEntries(OSOBY.map(o => [o.key, new Map()]));
+  for (const r of stav.volno) for (const l of r.lety || []) {
+    const m = lety[r.osoba];
+    if (!m || !l.datum) continue;
+    if (!m.has(l.datum)) m.set(l.datum, []);
+    m.get(l.datum).push(l.text);
+  }
   const svatky = new Map(stav.svatky.map(s => [s.datum, s.nazev]));
-  idx = { zaznamy, svatky };
+  idx = { zaznamy, svatky, lety };
 }
 
 const narokJany = () => Number(stav.nastaveni.jana_narok ?? 25);
@@ -738,6 +767,9 @@ function prekresli() {
 
 // ── Přehled: měsíce, řádek pro každou osobu ──
 let prehledOd = null;
+// Kdo je kde: standardně jen nejbližší cesty, ať panel nezabírá úvodní obrazovku
+const KDO_KDE_MAX = 4;
+let kdoKdeVse = false;
 function viewPrehled() {
   const zacatek = prehledOd || DNES.slice(0, 7) + '-01';
   const mesice = [];
@@ -765,15 +797,22 @@ function viewPrehled() {
     for (const o of OSOBY) {
       h += `<div class="lbl" style="color:${o.barva}">${o.jmeno}</div>`;
       h += dnyM.map(s => {
-        const st = stavDne(o.key, s);
-        const tit = `${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}`;
-        if (st.typ === 'sluzebni') return `<div class="cell sluzebni" title="${tit}"></div>`;
-        if (st.typ === 'vyuka') return `<div class="cell vyuka" style="--b:${o.barva}" title="${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}${svatek(s) ? ' (svátek ' + esc(svatek(s)) + ')' : ''}"></div>`;
-        if (st.typ === 'cesta') return `<div class="cell pryc" style="--b:${o.barva}" title="${tit}"></div>`;
-        if (!st.volno) return `<div class="cell" title="${o.jmeno} ${fmt(s)}: ${o.key === 'lukas' ? 'škola' : o.key === 'matej' ? 'výuka v Londýně' : 'práce'}"></div>`;
-        const cls = st.typ === 'dovolena' ? 'dovolena' : o.key + (st.silne ? '' : ' slabe');
-        return `<div class="cell ${cls}" title="${tit}"></div>`;
+        const html = bunka(o, s), lety = idx.lety[o.key].get(s);
+        if (!lety) return html;
+        // den s letem: ✈ v buňce, detail letu v bublině
+        const tipLety = lety.map(t => '✈️ ' + esc(t)).join('\n');
+        return html.replace('class="cell', 'class="cell let').replace(/title="([^"]*)"/, (_, t) => `title="${t}\n${tipLety}"`);
       }).join('');
+    }
+    function bunka(o, s) {
+      const st = stavDne(o.key, s);
+      const tit = `${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}`;
+      if (st.typ === 'sluzebni') return `<div class="cell sluzebni" title="${tit}"></div>`;
+      if (st.typ === 'vyuka') return `<div class="cell vyuka" style="--b:${o.barva}" title="${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}${svatek(s) ? ' (svátek ' + esc(svatek(s)) + ')' : ''}"></div>`;
+      if (st.typ === 'cesta') return `<div class="cell pryc" style="--b:${o.barva}" title="${tit}"></div>`;
+      if (!st.volno) return `<div class="cell" title="${o.jmeno} ${fmt(s)}: ${o.key === 'lukas' ? 'škola' : o.key === 'matej' ? 'výuka v Londýně' : 'práce'}"></div>`;
+      const cls = st.typ === 'dovolena' ? 'dovolena' : o.key + (st.silne ? '' : ' slabe');
+      return `<div class="cell ${cls}" title="${tit}"></div>`;
     }
     h += `<div class="lbl" style="color:var(--spolecne)">Spolu</div>`;
     h += dnyM.map(s => {
@@ -796,6 +835,8 @@ function viewPrehled() {
       const cls = ['ramecek', a < dnyM[0] && 'l', b > dnyM[n - 1] && 'r'].filter(Boolean).join(' ');
       h += `<div class="${cls}" style="grid-column:${i0 + 2}/${i1 + 3};grid-row:1/-1" data-n="${delka} ${dniSlovo(delka)}" title="Společné volno ${fmtRozsah(a, b)} (${delka} ${dniSlovo(delka)})"></div>`;
     }
+    // vlastní bublina místo nativního title (funguje i klepnutím na mobilu)
+    h = h.replace(/ title="/g, ' data-tip="');
     return `<div class="month"><h3>${MESICE[mes]} ${rok}</h3><div class="scroll"><div class="grid" style="--dni:${n};grid-template-rows:repeat(${radku},auto)">${h}</div></div></div>`;
   };
 
@@ -803,8 +844,8 @@ function viewPrehled() {
   const cestyPryc = [
     ...stav.volno.filter(r => TYPY_PRYC.includes(r.typ) && r.konec >= DNES).map(r => ({ ...r, kdo: OSOBA[r.osoba] })),
     ...potvrzene.filter(c => c.konec >= DNES).map(c => ({ ...c, typ: 'rodina', popis: nazevCesty(c) })),
-  ].sort((x, y) => x.zacatek.localeCompare(y.zacatek)).slice(0, 12);
-  const kdoKde = cestyPryc.map(r => {
+  ].sort((x, y) => x.zacatek.localeCompare(y.zacatek));
+  const kdoKde = cestyPryc.slice(0, kdoKdeVse ? 30 : KDO_KDE_MAX).map(r => {
     const dl = pocetDni(r.zacatek, r.konec);
     const pill = r.typ === 'sluzebni' ? '<span class="pill red">služební</span>'
       : r.typ === 'rodina' ? '<span class="pill orange">rodinná cesta</span>' : '<span class="pill blue">soukromá</span>';
@@ -812,7 +853,7 @@ function viewPrehled() {
     return `<div class="item">
       <span class="dot" style="background:${r.kdo ? r.kdo.barva : 'var(--cesta)'}"></span>
       <div class="main"><div class="t">${r.kdo ? r.kdo.jmeno + ': ' : 'Všichni: '}${esc(r.popis || TYPY[r.typ])}</div>
-        <div class="d">${fmtRozsah(r.zacatek, r.konec)} · ${dl} ${dniSlovo(dl)}${prave}</div></div>
+        <div class="d">${fmtRozsah(r.zacatek, r.konec)} · ${dl} ${dniSlovo(dl)}${r.lety?.length ? ` · ✈️ ${r.lety.length}` : ''}${prave}</div></div>
       ${pill}
       ${r.kdo && !r.cesta_id ? `<button class="btn small ghost" data-akce="upravit-volno" data-id="${r.id}">✎</button>` : ''}
     </div>`;
@@ -861,14 +902,15 @@ function viewPrehled() {
         <h2>Kdo je kde</h2><div class="spacer"></div>
         <button class="btn small primary" data-akce="pridat-cestu-osoby">+ Přidat cestu</button>
       </div>
-      <div class="sub">Nadcházející cesty jednotlivých členů rodiny – soukromé (např. Matěj v Čechách přes reading week, Jakub nebo Lukáš na výletě) i služební – a potvrzené rodinné cesty.</div>
+      <div class="sub">Nejbližší cesty členů rodiny a potvrzené rodinné cesty. Detaily letů jsou v kalendáři níže u dne s ✈.</div>
       <div class="list">${kdoKde || '<div class="empty">Žádné nadcházející cesty.</div>'}</div>
+      ${cestyPryc.length > KDO_KDE_MAX ? `<button class="btn small ghost" data-akce="kdo-kde-vse" style="margin-top:6px">${kdoKdeVse ? 'Zobrazit méně' : `Zobrazit všechny (${cestyPryc.length})`}</button>` : ''}
     </div>
     <div class="panel">
       <div class="row" style="margin-bottom:12px">
         <div>
           <h2>Kdo má kdy volno</h2>
-          <div class="sub" style="margin:0">12 měsíců od ${MESICE[D(zacatek).getUTCMonth()]} ${D(zacatek).getUTCFullYear()}. Najetím na den uvidíš důvod.</div>
+          <div class="sub" style="margin:0">12 měsíců od ${MESICE[D(zacatek).getUTCMonth()]} ${D(zacatek).getUTCFullYear()}. Najetím na den (na mobilu klepnutím) uvidíš důvod a lety.</div>
         </div>
         <div class="spacer"></div>
         <button class="btn small" data-akce="prehled-posun" data-od="${posun(-3)}">← 3 měsíce</button>
@@ -885,6 +927,7 @@ function viewPrehled() {
         <span><i style="background:var(--spolecne)"></i>volno Jana + Jakub + Lukáš</span>
         <span><i style="border:2px solid var(--spolecne);background:none"></i>společné volno 3+ dny</span>
         <span><i style="background:var(--cesta)"></i>potvrzená cesta</span>
+        <span>✈ let (detail v bublině)</span>
         <span style="color:var(--red);font-weight:700">červené datum = svátek PH</span>
       </div>
       <div class="months">${mesice.map(mesicHtml).join('')}</div>
@@ -1186,11 +1229,33 @@ function otevriVolno(r, vychozi = {}) {
   document.getElementById('dlg-volno-titul').textContent = rezimCesty ? (r ? 'Upravit cestu' : 'Přidat cestu') : (r ? 'Upravit volno' : 'Přidat volno');
   const v = r || { osoba: vychozi.osoba || 'lukas', zacatek: DNES, konec: DNES, typ: vychozi.typ || (vychozi.osoba === 'jana' ? 'dovolena' : 'skola'), popis: '' };
   for (const k of ['osoba', 'zacatek', 'konec', 'typ', 'popis']) formVolno[k].value = v[k] ?? '';
+  letyRadky.innerHTML = '';
+  (v.lety || []).forEach(radekLetu);
   napovedaVolna();
   dlgVolno.showModal();
 }
+// lety u cesty: řádky datum + popis letu
+const letyRadky = document.getElementById('lety-radky');
+function radekLetu(l = {}) {
+  const d = document.createElement('div');
+  d.className = 'lety-radek';
+  d.innerHTML = `<input type="date" data-let="datum" value="${esc(l.datum || '')}">
+    <input data-let="text" placeholder="např. TG621 MNL → BKK 13:10–15:45" value="${esc(l.text || '')}">
+    <button type="button" class="btn small ghost" title="Odebrat let">✕</button>`;
+  d.querySelector('button').addEventListener('click', () => d.remove());
+  letyRadky.appendChild(d);
+}
+document.getElementById('pridat-let').addEventListener('click', () => {
+  radekLetu({ datum: letyRadky.children.length ? formVolno.konec.value : formVolno.zacatek.value });
+  letyRadky.lastElementChild.querySelector('[data-let="text"]').focus();
+});
+const nactiLety = () => [...letyRadky.children]
+  .map(d => ({ datum: d.querySelector('[data-let="datum"]').value, text: d.querySelector('[data-let="text"]').value.trim() }))
+  .filter(l => l.datum && l.text)
+  .sort((a, b) => a.datum.localeCompare(b.datum));
 function napovedaVolna() {
   const f = formVolno, hint = document.getElementById('volno-hint');
+  document.getElementById('volno-lety').hidden = !TYPY_PRYC.includes(f.typ.value);
   const platne = f.zacatek.value && f.konec.value >= f.zacatek.value;
   if (platne && f.osoba.value === 'jana' && (f.typ.value === 'dovolena' || f.typ.value === 'cesta')) {
     const n = [...dny(f.zacatek.value, f.konec.value)].filter(pracovniDen).length;
@@ -1208,7 +1273,8 @@ formVolno.addEventListener('submit', (e) => {
   e.preventDefault();
   const f = formVolno;
   if (f.konec.value < f.zacatek.value) { toast('Konec je před začátkem.', true); return; }
-  const r = { osoba: f.osoba.value, zacatek: f.zacatek.value, konec: f.konec.value, typ: f.typ.value, popis: f.popis.value.trim() };
+  const r = { osoba: f.osoba.value, zacatek: f.zacatek.value, konec: f.konec.value, typ: f.typ.value, popis: f.popis.value.trim(),
+    lety: TYPY_PRYC.includes(f.typ.value) ? nactiLety() : [] };
   dlgVolno.close();
   proved(async () => {
     if (upravovaneVolno) {
@@ -1342,12 +1408,32 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   window.scrollTo(0, 0);
 });
 
+// ── Bublina s detailem dne v kalendáři ──
+const bublina = document.createElement('div');
+bublina.className = 'bublina';
+document.body.appendChild(bublina);
+function ukazBublinu(el) {
+  bublina.textContent = el.dataset.tip;
+  bublina.classList.add('vidi');
+  const r = el.getBoundingClientRect(), b = bublina.getBoundingClientRect();
+  const x = Math.max(8, Math.min(r.left + r.width / 2 - b.width / 2, innerWidth - b.width - 8));
+  const y = r.top - b.height - 6 < 8 ? r.bottom + 6 : r.top - b.height - 6;
+  bublina.style.left = x + 'px';
+  bublina.style.top = y + 'px';
+}
+const skryjBublinu = () => bublina.classList.remove('vidi');
+app.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-tip]'); el ? ukazBublinu(el) : skryjBublinu(); });
+app.addEventListener('mouseleave', skryjBublinu);
+document.addEventListener('click', (e) => { const el = e.target.closest('[data-tip]'); el ? ukazBublinu(el) : skryjBublinu(); });
+window.addEventListener('scroll', skryjBublinu, true);
+
 app.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-akce]');
   if (!el || el.tagName === 'SELECT' || el.tagName === 'INPUT') return;
   const a = el.dataset.akce, id = el.dataset.id;
   if (el.tagName === 'A') e.preventDefault();
   if (a === 'prehled-posun') { prehledOd = el.dataset.od || null; prekresli(); }
+  else if (a === 'kdo-kde-vse') { kdoKdeVse = !kdoKdeVse; prekresli(); }
   else if (a === 'navrhnout') otevriCestu(null, el.dataset.od, el.dataset.do);
   else if (a === 'upravit-cestu') otevriCestu(najdi(stav.cesty, id));
   else if (a === 'smazat-cestu') {
