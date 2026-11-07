@@ -203,6 +203,15 @@
     .okno .delka small { display: block; font-size: .65rem; font-weight: 600; color: var(--muted); }
     .okno .main { flex: 1; min-width: 180px; }
 
+    /* ── Nabídka termínů ── */
+    .terminy { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+    .termin { border: 1px solid var(--border); border-left: 3px solid var(--spolecne); border-radius: 10px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; }
+    .termin .delka { font-size: 1.2rem; font-weight: 800; min-width: 36px; text-align: center; line-height: 1; }
+    .termin .delka small { display: block; font-size: .62rem; font-weight: 600; color: var(--muted); }
+    .termin .main { flex: 1; min-width: 0; }
+    .termin .t { font-weight: 700; font-size: .85rem; }
+    .termin .d { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+
     /* ── Cesty ── */
     .cesta { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
     .cesta + .cesta { margin-top: 10px; }
@@ -368,6 +377,7 @@ const OSOBY = [
 const OSOBA = Object.fromEntries(OSOBY.map(o => [o.key, o]));
 // kdo jede na cestu: Jana, Jakub a Lukáš (Matěj se přidá, když má volno)
 const RODINA_DOMA = ['jana', 'jakub', 'lukas'];
+const OKNA_MIN = 3;  // minimální délka společného volna (dny)
 const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Soukromá cesta', vyuka: 'Škola / práce i přes svátek', jine: 'Jiné volno' };
 // sluzebni: pracovně pryč, není volno; cesta: volno, ale pryč (např. Matěj v Čechách)
 const TYPY_PRYC = ['sluzebni', 'cesta'];
@@ -599,6 +609,20 @@ function horizont() {
   return max > plus(DNES, 365) ? max : plus(DNES, 365);
 }
 
+// Celá rodina doma a volná: Jana, Jakub i Lukáš mají volno a nikdo z nich není pryč
+const spolecnyDen = (s) => RODINA_DOMA.every(o => jeDostupny(o, s));
+// souvislé úseky společného volna v rozsahu, alespoň minDelka dní → [[zacatek, konec], …]
+function spolecneUseky(od, doDne, minDelka) {
+  const useky = [];
+  let st = null;
+  for (const s of dny(od, doDne)) {
+    if (spolecnyDen(s)) { if (!st) st = s; }
+    else if (st) { useky.push([st, plus(s, -1)]); st = null; }
+  }
+  if (st) useky.push([st, doDne]);
+  return useky.filter(([a, b]) => pocetDni(a, b) >= minDelka);
+}
+
 // ── Vykreslení ───────────────────────────────────────────
 const app = document.getElementById('app');
 
@@ -623,18 +647,7 @@ function viewPrehled() {
 
   // společné volno (Jana + Jakub + Lukáš doma a volní) – úseky od 3 dní dostanou rámeček
   const konecRozsahu = (() => { const d = D(zacatek); d.setUTCMonth(d.getUTCMonth() + 12); return plus(iso(d), -1); })();
-  const spolecnyDen = (s) => RODINA_DOMA.every(o => jeDostupny(o, s));
-  const useky = [];
-  {
-    let st = null;
-    const od = plus(zacatek, -40), doDne = plus(konecRozsahu, 40);
-    for (const s of dny(od, doDne)) {
-      if (spolecnyDen(s)) { if (!st) st = s; }
-      else if (st) { useky.push([st, plus(s, -1)]); st = null; }
-    }
-    if (st) useky.push([st, doDne]);
-  }
-  const ramecky = useky.filter(([a, b]) => pocetDni(a, b) >= 3);
+  const ramecky = spolecneUseky(plus(zacatek, -40), plus(konecRozsahu, 40), OKNA_MIN);
 
   const mesicHtml = (m1) => {
     const d = D(m1), rok = d.getUTCFullYear(), mes = d.getUTCMonth();
@@ -740,7 +753,6 @@ function viewPrehled() {
 }
 
 // ── Společná volna ──
-const OKNA_MIN = 3;  // minimální délka společného volna (dny)
 function viewOkna() {
   const okna = spolecnaOkna(DNES, horizont(), OKNA_MIN);
   const polozka = (w) => {
@@ -837,14 +849,37 @@ function viewCesty() {
   const navrhy = stav.cesty.filter(c => c.stav === 'navrh').sort((a, b) => skore(b) - skore(a) || a.zacatek.localeCompare(b.zacatek));
   const potvrzene = stav.cesty.filter(c => c.stav === 'potvrzena').sort((a, b) => a.zacatek.localeCompare(b.zacatek));
   const zamitnute = stav.cesty.filter(c => c.stav === 'zamitnuta');
+
+  // nabídka termínů: nadcházející společné volno Jany, Jakuba i Lukáše (od 3 dní)
+  const terminy = spolecneUseky(DNES, horizont(), OKNA_MIN).slice(0, 8);
+  const terminHtml = ([a, b]) => {
+    const dl = pocetDni(a, b);
+    const prekryv = stav.cesty.filter(c => c.stav !== 'zamitnuta' && c.zacatek <= b && c.konec >= a);
+    const matej = [...dny(a, b)].filter(s => jeDostupny('matej', s)).length;
+    const popis = [...new Set([...dny(a, b)].flatMap(s => (idx.zaznamy.lukas.get(s) || []).filter(r => r.typ === 'skola').map(r => r.popis)))].join(', ');
+    return `<div class="termin">
+      <div class="delka">${dl}<small>${dniSlovo(dl)}</small></div>
+      <div class="main">
+        <div class="t">${fmtRozsah(a, b)}</div>
+        <div class="d">${esc(popis) || 'víkend / svátky'}${matej ? ` · Matěj volno ${matej === dl ? 'celou dobu' : matej + ' z ' + dl + ' dní'}` : ''}</div>
+        ${prekryv.length ? `<div class="d">už navrženo: ${prekryv.map(c => esc(c.destinace)).join(', ')}</div>` : ''}
+      </div>
+      <button class="btn small${prekryv.length ? '' : ' primary'}" data-akce="navrhnout" data-od="${a}" data-do="${b}">Navrhnout</button>
+    </div>`;
+  };
   return `
+    <div class="panel">
+      <h2>Volné termíny pro celou rodinu</h2>
+      <div class="sub">Podle kalendáře: Jana, Jakub i Lukáš mají volno (bez dovolené navíc) alespoň ${OKNA_MIN} dny a nikdo není na cestě. Klikni na <b>Navrhnout</b> a termín se předvyplní – stačí doplnit destinaci.</div>
+      <div class="terminy">${terminy.length ? terminy.map(terminHtml).join('') : '<div class="empty">V zapsaném období žádný takový termín není. Delší okna, kdy by si Jana vzala dovolenou, najdeš v záložce Společná volna.</div>'}</div>
+    </div>
     <div class="panel">
       <div class="row" style="margin-bottom:6px">
         <h2>Návrhy cest</h2><div class="spacer"></div>
         <button class="btn primary" data-akce="navrhnout">+ Navrhnout cestu</button>
       </div>
       <div class="sub">Každý dá návrhu 1–5 hvězdiček. Seřazeno podle průměru. Potvrzená cesta se zapíše do kalendáře a Janě se odečte dovolená.</div>
-      ${navrhy.length ? navrhy.map(karta).join('') : '<div class="empty">Zatím žádné návrhy. Termín nejlépe vyber v záložce Společná volna.</div>'}
+      ${navrhy.length ? navrhy.map(karta).join('') : '<div class="empty">Zatím žádné návrhy. Termín vyber z nabídky výše nebo v záložce Společná volna.</div>'}
     </div>
     ${potvrzene.length ? `<div class="panel"><h2 style="margin-bottom:12px">Potvrzené cesty</h2>${potvrzene.map(karta).join('')}</div>` : ''}
     ${zamitnute.length ? `<div class="panel"><h2 style="margin-bottom:12px">Zamítnuté</h2>${zamitnute.map(karta).join('')}</div>` : ''}`;
