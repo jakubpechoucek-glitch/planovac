@@ -1,6 +1,6 @@
 -- Plánovač: tabulky a pravidla přístupu
 -- V Supabase (projekt Rozcestníku unoefgbzymlwwehgzusf) aplikováno 7. 11. 2026
--- jako migrace planovac_tabulky, planovac_volno_cesta a planovac_sluzebni_cesta (7. 11. 2026).
+-- jako migrace planovac_tabulky, planovac_volno_cesta planovac_sluzebni_cesta a planovac_vyuka_pres_svatek (7. 11. 2026).
 -- Funkce je_clen() a moje_jmeno() a tabulka clenove pochází z Rozcestníku.
 
 -- ── Tabulky ──
@@ -63,6 +63,12 @@ create index plan_volno_cesta_id on public.plan_volno(cesta_id);
 alter table public.plan_volno drop constraint plan_volno_typ_check;
 alter table public.plan_volno add constraint plan_volno_typ_check
   check (typ in ('skola','dovolena','cesta','sluzebni','jine'));
+
+-- migrace planovac_vyuka_pres_svatek: škola / práce i přes svátek nebo víkend
+-- (např. ISM učí 2. a 3. den ASEAN svátků)
+alter table public.plan_volno drop constraint plan_volno_typ_check;
+alter table public.plan_volno add constraint plan_volno_typ_check
+  check (typ in ('skola','dovolena','cesta','sluzebni','vyuka','jine'));
 
 -- ── Kdo a kdy přidal/upravil – plní server podle přihlášeného člena ──
 create or replace function public.plan_audit() returns trigger

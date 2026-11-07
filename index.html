@@ -153,6 +153,7 @@
     .cell.dovolena { background: repeating-linear-gradient(45deg, var(--jana), var(--jana) 3px, #f9a8d4 3px, #f9a8d4 6px); }
     .cell.prazdna { background: transparent; }
     .cell.sluzebni { background: repeating-linear-gradient(-45deg, #374151 0 3px, #d1d5db 3px 6px); }
+    .cell.vyuka { box-shadow: inset 0 0 0 2px var(--b); }
     .cell.pryc { background-color: var(--b); background-image: radial-gradient(#fff 1.2px, transparent 1.6px); background-size: 6px 6px; }
     .grid { position: relative; }
     .ramecek {
@@ -288,6 +289,7 @@
         <option value="dovolena">Dovolená (Jana)</option>
         <option value="cesta">Soukromá cesta – volno, ale jinde (např. Matěj do Čech)</option>
         <option value="sluzebni">Služební cesta – pracovně pryč</option>
+        <option value="vyuka">Škola / práce i přes svátek – zruší volno (např. ISM učí ve svátek)</option>
         <option value="jine">Jiné volno</option>
       </select>
     </label>
@@ -366,7 +368,7 @@ const OSOBY = [
 const OSOBA = Object.fromEntries(OSOBY.map(o => [o.key, o]));
 // kdo jede na cestu: Jana, Jakub a Lukáš (Matěj se přidá, když má volno)
 const RODINA_DOMA = ['jana', 'jakub', 'lukas'];
-const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Soukromá cesta', jine: 'Jiné volno' };
+const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Soukromá cesta', vyuka: 'Škola / práce i přes svátek', jine: 'Jiné volno' };
 // sluzebni: pracovně pryč, není volno; cesta: volno, ale pryč (např. Matěj v Čechách)
 const TYPY_PRYC = ['sluzebni', 'cesta'];
 const MESICE = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
@@ -424,6 +426,8 @@ function demoData() {
       svatky.push({ id: id++, datum: d(yy, m, dd), nazev: n, zdroj: 'ukázka' });
     }
   }
+  for (const dd of [16, 17, 18]) svatky.push({ id: id++, datum: d(y, 11, dd), nazev: 'ASEAN Summit (ukázka)', zdroj: 'ukázka' });
+  volno.push(v('lukas', d(y, 11, 17), d(y, 11, 18), 'vyuka', 'ISM učí i přes ASEAN svátky'));
   const cesty = [
     { id: 901, destinace: 'Bohol', zacatek: d(y + 1, 3, 20), konec: d(y + 1, 3, 26), poznamka: 'Panglao, potápění s želvami', stav: 'potvrzena', pridal: 'Jana' },
     { id: 902, destinace: 'Da Nang a Hoi An', zacatek: d(y, 12, 19), konec: d(y, 12, 28), poznamka: 'Vánoce ve Vietnamu, i s Matějem', stav: 'navrh', pridal: 'Jakub' },
@@ -515,7 +519,7 @@ const narokJany = () => Number(stav.nastaveni.jana_narok ?? 25);
 const jakubVolnoOd = () => String(stav.nastaveni.jakub_volno_od || '2027-01-01');
 const svatek = (s) => idx.svatky.get(s);
 // pracovní den Jany: všední den, který není svátek
-const pracovniDen = (s) => !jeVikend(s) && !svatek(s);
+const pracovniDen = (s) => (idx.zaznamy.jana.get(s) || []).some(r => r.typ === 'vyuka') || (!jeVikend(s) && !svatek(s));
 
 // Stav osoby v daný den: { volno, silne (zapsané volno), pryc (je jinde), typ, duvod }
 function stavDne(o, s) {
@@ -523,6 +527,8 @@ function stavDne(o, s) {
   if (z?.length) {
     const duvod = z.map(r => (TYPY_PRYC.includes(r.typ) ? TYPY[r.typ] + ': ' : '') + (r.popis || TYPY[r.typ])).join(', ');
     if (z.some(r => r.typ === 'sluzebni')) return { volno: false, pryc: true, silne: true, typ: 'sluzebni', duvod };
+    // výuka / práce zruší volno i ve svátek nebo o prázdninách (např. ISM učí 2. a 3. den ASEAN svátků)
+    if (z.some(r => r.typ === 'vyuka')) return { volno: false, silne: true, typ: 'vyuka', duvod: z.filter(r => r.typ === 'vyuka').map(r => r.popis || TYPY.vyuka).join(', ') };
     if (z.some(r => r.typ === 'cesta')) return { volno: true, pryc: true, silne: true, typ: 'cesta', duvod };
     const typ = z.some(r => r.typ === 'dovolena') ? 'dovolena' : z[0].typ;
     return { volno: true, silne: true, typ, duvod };
@@ -543,7 +549,7 @@ function janaPotrebuje(a, b, ignorovatCestu = null) {
   for (const s of dny(a, b)) {
     if (!pracovniDen(s)) continue;
     const z = idx.zaznamy.jana.get(s) || [];
-    if (z.some(r => r.cesta_id == null || r.cesta_id !== ignorovatCestu)) continue;
+    if (z.some(r => r.typ !== 'vyuka' && (r.cesta_id == null || r.cesta_id !== ignorovatCestu))) continue;
     n++;
   }
   return n;
@@ -646,6 +652,7 @@ function viewPrehled() {
         const st = stavDne(o.key, s);
         const tit = `${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}`;
         if (st.typ === 'sluzebni') return `<div class="cell sluzebni" title="${tit}"></div>`;
+        if (st.typ === 'vyuka') return `<div class="cell vyuka" style="--b:${o.barva}" title="${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}${svatek(s) ? ' (svátek ' + esc(svatek(s)) + ')' : ''}"></div>`;
         if (st.typ === 'cesta') return `<div class="cell pryc" style="--b:${o.barva}" title="${tit}"></div>`;
         if (!st.volno) return `<div class="cell" title="${o.jmeno} ${fmt(s)}: ${o.key === 'lukas' ? 'škola' : o.key === 'matej' ? 'výuka v Londýně' : 'práce'}"></div>`;
         const cls = st.typ === 'dovolena' ? 'dovolena' : o.key + (st.silne ? '' : ' slabe');
@@ -722,6 +729,7 @@ function viewPrehled() {
         <span><i class="cell dovolena" style="height:12px"></i>Janina dovolená</span>
         <span><i class="cell sluzebni" style="height:12px"></i>služební cesta</span>
         <span><i class="cell pryc" style="height:12px;--b:var(--matej)"></i>volno, ale jinde</span>
+        <span><i class="cell vyuka" style="height:12px;--b:var(--lukas)"></i>škola / práce i přes svátek</span>
         <span><i style="background:var(--spolecne)"></i>volno Jana + Jakub + Lukáš</span>
         <span><i style="border:2px solid var(--spolecne);background:none"></i>společné volno 3+ dny</span>
         <span><i style="background:var(--cesta)"></i>potvrzená cesta</span>
@@ -995,6 +1003,8 @@ function napovedaVolna() {
   if (platne && f.osoba.value === 'jana' && (f.typ.value === 'dovolena' || f.typ.value === 'cesta')) {
     const n = [...dny(f.zacatek.value, f.konec.value)].filter(pracovniDen).length;
     hint.textContent = `Janě se odečte ${n} ${dniSlovo(n)} dovolené (pracovní dny bez svátků).`;
+  } else if (platne && f.typ.value === 'vyuka') {
+    hint.textContent = 'V tyto dny nemá volno, i když je svátek, víkend nebo jinak zapsané volno.' + (f.osoba.value === 'jana' ? ' Pro Janu jsou to pracovní dny (dovolená by je čerpala).' : '');
   } else if (platne && f.typ.value === 'sluzebni') {
     hint.textContent = 'Služební cesta není volno a dovolenou nečerpá. Do společného volna se nepočítá.';
   } else if (platne && f.typ.value === 'cesta') {

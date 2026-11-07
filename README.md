@@ -21,6 +21,7 @@ Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, J
 - **Lukáš, Jana, Jakub:** volno je zapsané volno + víkendy + filipínské svátky. Jakub má navíc volno každý den od data v nastavení (`jakub_volno_od`, výchozí 1. 1. 2027).
 - **Služební cesta** (`typ = sluzebni`): osoba je pracovně pryč – není to volno ani v den, kdy by jinak bylo (víkend, svátek), a nečerpá se z ní dovolená. Do společného volna se nepočítá; u oken a návrhů cest se ukáže „Jana X dní na služební cestě“.
 - **Soukromá cesta** (`typ = cesta`): osoba má volno, ale je jinde (např. Matěj u babičky v Praze přes reading week, Jakub nebo Lukáš na výletě). Do společného volna se nepočítá a u oken se ukáže „Matěj X dní jinde“. **Janina** soukromá cesta čerpá v pracovní dny dovolenou stejně jako běžná dovolená a je vidět i v záložce Janina dovolená.
+- **Škola / práce i přes svátek** (`typ = vyuka`): zruší volno v dny, kdy by jinak bylo (svátek, víkend, prázdniny). Příklad: ASEAN svátky 16.–18. 11. 2026 platí pro celou rodinu, ale ISM učí 2. a 3. den, takže Lukáš má na 17.–18. 11. záznam „vyuka“. V Přehledu je taková buňka bílá s obrysem v barvě osoby. U Jany z takového dne udělá pracovní den (případná dovolená ho čerpá).
 - **Rámeček v Přehledu** = souvislý úsek alespoň 3 dnů, kdy Jana, Jakub i Lukáš mají volno a nejsou pryč (počítají se i víkendy a svátky).
 - **Matěj:** je v Londýně, takže víkendy ani filipínské svátky se mu nepočítají – volno má jen v zapsaných obdobích mimo výuku na UCL.
 - **Janina dovolená** se počítá v **pracovních dnech**: všední den, který není svátkem na Filipínách. Překrývající se záznamy se nepočítají dvakrát. Počítá se po kalendářních letech.
@@ -42,11 +43,11 @@ Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, J
 
 ### Data (Supabase)
 
-Data jsou v Supabase projektu Rozcestníku (`unoefgbzymlwwehgzusf`). Definice je v [`sql/01_tabulky.sql`](sql/01_tabulky.sql), počáteční data v [`sql/02_data_ism_ucl_svatky.sql`](sql/02_data_ism_ucl_svatky.sql). V Supabase jsou aplikované jako migrace `planovac_tabulky`, `planovac_volno_cesta` a `planovac_sluzebni_cesta`.
+Data jsou v Supabase projektu Rozcestníku (`unoefgbzymlwwehgzusf`). Definice je v [`sql/01_tabulky.sql`](sql/01_tabulky.sql), počáteční data v [`sql/02_data_ism_ucl_svatky.sql`](sql/02_data_ism_ucl_svatky.sql). V Supabase jsou aplikované jako migrace `planovac_tabulky`, `planovac_volno_cesta`, `planovac_sluzebni_cesta` a `planovac_vyuka_pres_svatek`.
 
 | Tabulka | Obsah |
 |---|---|
-| `plan_volno` | jeden řádek = volno jedné osoby od–do: `osoba` (`lukas`/`matej`/`jana`/`jakub`), `zacatek`, `konec`, `typ` (`skola` prázdniny, `dovolena` Janina dovolená, `sluzebni` služební cesta, `cesta` soukromá cesta, `jine` jiné volno), `popis`, `zdroj` (ISM, UCL, ručně, cesta), `cesta_id` (jen u dovolené z potvrzené cesty), plus `pridal`/`vytvoreno`, `upravil`/`upraveno` |
+| `plan_volno` | jeden řádek = volno jedné osoby od–do: `osoba` (`lukas`/`matej`/`jana`/`jakub`), `zacatek`, `konec`, `typ` (`skola` prázdniny, `dovolena` Janina dovolená, `sluzebni` služební cesta, `cesta` soukromá cesta, `vyuka` škola/práce i přes svátek, `jine` jiné volno), `popis`, `zdroj` (ISM, UCL, ručně, cesta), `cesta_id` (jen u dovolené z potvrzené cesty), plus `pridal`/`vytvoreno`, `upravil`/`upraveno` |
 | `plan_svatky` | `datum` (unikátní), `nazev`, `zdroj` – státní svátky na Filipínách |
 | `plan_nastaveni` | klíč–hodnota (jsonb): `jana_narok` (25), `jakub_volno_od` (`"2027-01-01"`) |
 | `plan_cesty` | návrh cesty: `destinace`, `zacatek`, `konec`, `poznamka`, `stav` (`navrh`/`potvrzena`/`zamitnuta`), plus kdo a kdy |
@@ -62,7 +63,8 @@ Data jsou v Supabase projektu Rozcestníku (`unoefgbzymlwwehgzusf`). Definice je
 - **ISM (Lukáš):** z PDF kalendářů *ISM_CalendarSY26-27_Sep32026.pdf* a *Calendar-SY27-28_October52026_BOTapproved-07Oct2026.pdf*. Zapsané jsou dny bez výuky, které nejsou státním svátkem (faculty in-service, podzimní/semestrální/jarní prázdniny, léto). Státní svátky z kalendáře jsou v `plan_svatky`.
   - Letní prázdniny 2028 končí odhadem 31. 7. 2028 – po vydání kalendáře 2028/29 opravit.
 - **UCL (Matěj):** oficiální [term dates](https://www.ucl.ac.uk/study/current-students/life-ucl/term-dates-and-closures). Zapsané jsou reading weeks a prázdniny mezi trimestry. Konec Velikonoc 2028 je odhad (summer term 2028 zatím nebyl zveřejněný); reading weeks 2027/28 doplnit, až je UCL zveřejní.
-- **Svátky na Filipínách:** [Nager.Date](https://date.nager.at) pro 2026–2028, doplněné o svátky uvedené v kalendářích ISM (volby, EDSA, Eid il Fitr, Eid il Adha, All Souls' Day). Muslimské svátky a „special non-working days“ vyhlašuje vláda průběžně – přidávají se v záložce **Úpravy**.
+- **Svátky na Filipínách:** [Nager.Date](https://date.nager.at) pro 2026–2028, doplněné o svátky uvedené v kalendářích ISM (volby, EDSA, Eid il Fitr, Eid il Adha, All Souls' Day). Muslimské svátky a „special non-working days“ vyhlašuje vláda průběžně – přidávají se v záložce **Úpravy**. Když škola (nebo práce) svátek nedodrží, přidej dotyčnému záznam typu **Škola / práce i přes svátek** – svátek se tím pro ostatní nezmění.
+- **ASEAN Summit 2026:** 16.–18. 11. 2026 special non-working days v Metro Manila ([Proclamation No. 1447](https://philstarlife.com/news-and-views/968280-palace-announces-nov-16-to-18-as-special-non-working-days-asean-summit)); ISM učí 17. a 18. 11.
 
 ### Nový školní rok / nový kalendář
 

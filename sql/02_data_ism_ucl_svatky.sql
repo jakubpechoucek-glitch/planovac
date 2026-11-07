@@ -87,3 +87,8 @@ insert into public.plan_svatky (datum, nazev, zdroj) values
   ('2028-12-25', 'Christmas Day', 'Nager.Date'),
   ('2028-12-30', 'Rizal Day', 'Nager.Date'),
   ('2028-12-31', 'Last Day of the Year', 'Nager.Date');
+
+-- ── Doplněno 7. 11. 2026: ASEAN Summit (Proclamation No. 1447, NCR) ──
+-- svátky 16.–18. 11. 2026 zadány ručně v aplikaci; ISM učí 2. a 3. den
+insert into public.plan_volno (osoba, zacatek, konec, typ, popis, zdroj) values
+  ('lukas', '2026-11-17', '2026-11-18', 'vyuka', 'ISM učí i přes ASEAN svátky (2. a 3. den)', 'ISM');
