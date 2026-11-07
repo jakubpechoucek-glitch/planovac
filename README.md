@@ -1,9 +1,9 @@
-# Planovac — rodinný plánovač volna
+# planovac — rodinný plánovač volna
 
 Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, Jana v práci, Jakub od 2027 bez práce), Janina dovolená (25 pracovních dnů ročně) a hlasování o tom, kam a na jak dlouho vyrazit po jihovýchodní Asii.
 
-- **Web:** https://jakubpechoucek-glitch.github.io/Planovac/
-- **Ukázka bez přihlášení:** https://jakubpechoucek-glitch.github.io/Planovac/?demo
+- **Web:** https://jakubpechoucek-glitch.github.io/planovac/
+- **Ukázka bez přihlášení:** https://jakubpechoucek-glitch.github.io/planovac/?demo
 - **Rozcestník (rodinný portál):** https://jakubpechoucek-glitch.github.io/rozcestnik/
 
 ## Co umí
