@@ -315,14 +315,14 @@
 <dialog id="dlg-cesta">
   <form method="dialog" id="form-cesta">
     <h3 id="dlg-cesta-titul">Navrhnout cestu</h3>
-    <label>Destinace
-      <input name="destinace" list="destinace-list" required placeholder="např. El Nido, Palawan">
+    <label>Země
+      <select name="destinace" required></select>
     </label>
     <div class="two">
       <label>Odjezd <input type="date" name="zacatek" required></label>
       <label>Návrat <input type="date" name="konec" required></label>
     </div>
-    <label>Poznámka <textarea name="poznamka" rows="2" placeholder="Proč právě tam, rozpočet, odkaz…"></textarea></label>
+    <label>Poznámka / detail <textarea name="poznamka" rows="2" placeholder="Místo a ubytování lze doplnit později – proč právě tam, rozpočet, odkaz…"></textarea></label>
     <div class="hint" id="cesta-hint"></div>
     <div class="actions">
       <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
@@ -341,14 +341,6 @@
     </div>
   </form>
 </dialog>
-<datalist id="destinace-list">
-  <option value="El Nido, Palawan"><option value="Coron, Palawan"><option value="Siargao"><option value="Boracay">
-  <option value="Bohol"><option value="Cebu – Moalboal"><option value="Bali"><option value="Lombok a Gili">
-  <option value="Phuket"><option value="Krabi"><option value="Koh Samui"><option value="Chiang Mai">
-  <option value="Bangkok"><option value="Hanoj a Ha Long"><option value="Da Nang a Hoi An"><option value="Phu Quoc">
-  <option value="Siem Reap (Angkor)"><option value="Luang Prabang"><option value="Langkawi"><option value="Penang">
-  <option value="Borneo – Sabah"><option value="Singapur">
-</datalist>
 
 <!-- ── Dialog: svátek ── -->
 <dialog id="dlg-svatek">
@@ -378,6 +370,15 @@ const OSOBA = Object.fromEntries(OSOBY.map(o => [o.key, o]));
 // kdo jede na cestu: Jana, Jakub a Lukáš (Matěj se přidá, když má volno)
 const RODINA_DOMA = ['jana', 'jakub', 'lukas'];
 const OKNA_MIN = 3;  // minimální délka společného volna (dny)
+// Destinace cest: jen státy s vlajkou (detail místa se doplní později do poznámky)
+const ZEME = {
+  'Jihovýchodní Asie': [['🇵🇭', 'Filipíny'], ['🇹🇭', 'Thajsko'], ['🇻🇳', 'Vietnam'], ['🇰🇭', 'Kambodža'], ['🇱🇦', 'Laos'], ['🇲🇾', 'Malajsie'],
+    ['🇸🇬', 'Singapur'], ['🇮🇩', 'Indonésie'], ['🇧🇳', 'Brunej'], ['🇹🇱', 'Východní Timor'], ['🇲🇲', 'Myanmar']],
+  'Východní Asie': [['🇯🇵', 'Japonsko'], ['🇰🇷', 'Jižní Korea'], ['🇹🇼', 'Taiwan'], ['🇭🇰', 'Hongkong'], ['🇲🇴', 'Macao'], ['🇨🇳', 'Čína'], ['🇲🇳', 'Mongolsko']],
+  'Jižní Asie': [['🇮🇳', 'Indie'], ['🇱🇰', 'Srí Lanka'], ['🇲🇻', 'Maledivy'], ['🇳🇵', 'Nepál'], ['🇧🇹', 'Bhútán']],
+  'Oceánie': [['🇦🇺', 'Austrálie'], ['🇳🇿', 'Nový Zéland'], ['🇫🇯', 'Fidži'], ['🇵🇼', 'Palau'], ['🇵🇫', 'Francouzská Polynésie']],
+  'Jinde': [['🇦🇪', 'Spojené arabské emiráty'], ['🇨🇿', 'Česko'], ['🇦🇹', 'Rakousko'], ['🇺🇸', 'USA'], ['🌍', 'Jiná země']],
+};
 const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Soukromá cesta', vyuka: 'Škola / práce i přes svátek', jine: 'Jiné volno' };
 // sluzebni: pracovně pryč, není volno; cesta: volno, ale pryč (např. Matěj v Čechách)
 const TYPY_PRYC = ['sluzebni', 'cesta'];
@@ -425,7 +426,7 @@ function demoData() {
       v('matej', d(yy + 1, 6, 12), d(yy + 1, 9, 26), 'skola', 'Letní prázdniny'),
     );
   }
-  volno.push(v('jana', d(y + 1, 3, 22), d(y + 1, 3, 24), 'dovolena', 'Cesta: Bohol'));
+  volno.push(v('jana', d(y + 1, 3, 22), d(y + 1, 3, 24), 'dovolena', 'Cesta: 🇵🇭 Filipíny'));
   volno.push(v('jana', d(y, 11, 16), d(y, 11, 19), 'sluzebni', 'Singapur – konference'));
   volno.push(v('jana', d(y + 1, 2, 8), d(y + 1, 2, 12), 'sluzebni', 'Ho Či Minovo Město'));
   volno.push(v('matej', d(y + 1, 2, 15), d(y + 1, 2, 19), 'skola', 'Reading week'));
@@ -439,9 +440,9 @@ function demoData() {
   for (const dd of [16, 17, 18]) svatky.push({ id: id++, datum: d(y, 11, dd), nazev: 'ASEAN Summit (ukázka)', zdroj: 'ukázka' });
   volno.push(v('lukas', d(y, 11, 17), d(y, 11, 18), 'vyuka', 'ISM učí i přes ASEAN svátky'));
   const cesty = [
-    { id: 901, destinace: 'Bohol', zacatek: d(y + 1, 3, 20), konec: d(y + 1, 3, 26), poznamka: 'Panglao, potápění s želvami', stav: 'potvrzena', pridal: 'Jana' },
-    { id: 902, destinace: 'Da Nang a Hoi An', zacatek: d(y, 12, 19), konec: d(y, 12, 28), poznamka: 'Vánoce ve Vietnamu, i s Matějem', stav: 'navrh', pridal: 'Jakub' },
-    { id: 903, destinace: 'Bali', zacatek: d(y, 12, 19), konec: d(y + 1, 1, 1), poznamka: '', stav: 'navrh', pridal: 'Lukáš' },
+    { id: 901, destinace: '🇵🇭 Filipíny', zacatek: d(y + 1, 3, 20), konec: d(y + 1, 3, 26), poznamka: 'Bohol – Panglao, potápění s želvami', stav: 'potvrzena', pridal: 'Jana' },
+    { id: 902, destinace: '🇻🇳 Vietnam', zacatek: d(y, 12, 19), konec: d(y, 12, 28), poznamka: 'Vánoce v Da Nangu a Hoi Anu, i s Matějem', stav: 'navrh', pridal: 'Jakub' },
+    { id: 903, destinace: '🇮🇩 Indonésie', zacatek: d(y, 12, 19), konec: d(y + 1, 1, 1), poznamka: 'Bali', stav: 'navrh', pridal: 'Lukáš' },
   ];
   const hlasy = [
     { cesta_id: 902, kdo: 'Jakub', hodnoceni: 5, komentar: 'Jídlo!' },
@@ -1067,9 +1068,15 @@ formVolno.addEventListener('submit', (e) => {
 const dlgCesta = document.getElementById('dlg-cesta');
 const formCesta = document.getElementById('form-cesta');
 let upravovanaCesta = null;
+const moznostiZemi = Object.entries(ZEME).map(([sk, zeme]) =>
+  `<optgroup label="${sk}">${zeme.map(([f, n]) => `<option value="${f} ${n}">${f} ${n}</option>`).join('')}</optgroup>`).join('');
 function otevriCestu(c, od, doDne) {
   upravovanaCesta = c;
   document.getElementById('dlg-cesta-titul').textContent = c ? 'Upravit cestu' : 'Navrhnout cestu';
+  // starší cesta s volným textem (např. „Ischgl (AUT)") zůstane jako vlastní položka
+  const puvodni = c?.destinace && ![...Object.values(ZEME).flat()].some(([f, n]) => `${f} ${n}` === c.destinace)
+    ? `<option value="${esc(c.destinace)}">${esc(c.destinace)}</option>` : '';
+  formCesta.destinace.innerHTML = `<option value="" disabled>Vyber zemi…</option>${puvodni}${moznostiZemi}`;
   formCesta.destinace.value = c?.destinace || '';
   formCesta.zacatek.value = c?.zacatek || od || '';
   formCesta.konec.value = c?.konec || doDne || '';
