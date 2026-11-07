@@ -261,9 +261,9 @@
 
 <nav class="tabs" id="tabs">
   <button data-view="prehled" class="active">Přehled</button>
-  <button data-view="okna">Společná volna</button>
   <button data-view="cesty">Cesty a hlasování</button>
   <button data-view="jana">Janina dovolená</button>
+  <button data-view="okna">Společná volna</button>
   <button data-view="upravy">Úpravy</button>
 </nav>
 
@@ -732,9 +732,9 @@ function viewPrehled() {
 }
 
 // ── Společná volna ──
-let oknaMin = 4;
+const OKNA_MIN = 3;  // minimální délka společného volna (dny)
 function viewOkna() {
-  const okna = spolecnaOkna(DNES, horizont(), oknaMin);
+  const okna = spolecnaOkna(DNES, horizont(), OKNA_MIN);
   const polozka = (w) => {
     const janaTxt = w.janaDov === 0
       ? `<span class="pill green">Jana bez dovolené</span>`
@@ -757,16 +757,8 @@ function viewOkna() {
   };
   return `
     <div class="panel">
-      <div class="row" style="margin-bottom:6px">
-        <h2>Kdy můžeme jet spolu</h2>
-        <div class="spacer"></div>
-        <label style="font-size:.8rem;color:var(--muted)">alespoň
-          <select data-akce="okna-min">
-            ${[3, 4, 5, 7, 10].map(n => `<option value="${n}"${n === oknaMin ? ' selected' : ''}>${n} dní</option>`).join('')}
-          </select>
-        </label>
-      </div>
-      <div class="sub">Úseky, kdy má volno Lukáš i Jakub. U každého je vidět, kolik pracovních dnů dovolené by si musela vzít Jana
+      <h2 style="margin-bottom:6px">Kdy můžeme jet spolu</h2>
+      <div class="sub">Úseky alespoň ${OKNA_MIN} dny, kdy má volno Lukáš i Jakub. U každého je vidět, kolik pracovních dnů dovolené by si musela vzít Jana
         (víkendy a filipínské svátky se nepočítají), jestli není na služební cestě a jestli by mohl přiletět Matěj. Jakub má volno od ${fmt(jakubVolnoOd())}.</div>
       ${okna.length ? okna.map(polozka).join('') : '<div class="empty">V zapsaném období žádné takové okno není.</div>'}
     </div>`;
@@ -1164,8 +1156,7 @@ app.addEventListener('change', (e) => {
   const el = e.target.closest('[data-akce]');
   if (!el) return;
   const a = el.dataset.akce;
-  if (a === 'okna-min') { oknaMin = Number(el.value); prekresli(); }
-  else if (a === 'jana-rok') { janaRok = Number(el.value); prekresli(); }
+  if (a === 'jana-rok') { janaRok = Number(el.value); prekresli(); }
   else if (a === 'upravy-osoba') { upravyOsoba = el.value; prekresli(); }
   else if (a === 'upravy-stare') { upravyStare = el.checked; prekresli(); }
   else if (a === 'jakub-od' && el.value) {
