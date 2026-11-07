@@ -212,6 +212,23 @@
     .termin .t { font-weight: 700; font-size: .85rem; }
     .termin .d { font-size: .72rem; color: var(--muted); margin-top: 2px; }
 
+    /* ── Rozpracované návrhy (Přehled) ── */
+    .panel-navrhy { border-color: #fcd34d; background: #fffbeb; }
+    .navrh-stav { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); }
+    .navrh-stav + .navrh-stav { margin-top: 8px; }
+    .navrh-stav.ceka { border: 2px solid var(--orange); }
+    .navrh-stav.hotovy { border-color: var(--green); }
+    .navrh-stav .main { flex: 1; min-width: 0; }
+    .navrh-stav .t { font-weight: 700; font-size: .9rem; }
+    .navrh-stav .d { font-weight: 400; color: var(--muted); font-size: .8rem; }
+    .navrh-stav .radky { font-size: .8rem; margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+    .navrh-stav .na-me { color: var(--orange); font-weight: 700; }
+    .navrh-stav .hotovo { color: var(--green); font-weight: 600; }
+    .navrh-stav .nepovinne { color: var(--muted); }
+    .odznak { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: var(--orange); color: #fff; font-size: .7rem; line-height: 18px; text-align: center; }
+    .cesta.blik { animation: blik 1.6s ease; }
+    @keyframes blik { 0%, 60% { box-shadow: 0 0 0 3px var(--orange); } 100% { box-shadow: none; } }
+
     /* ── Varianty destinací ── */
     .varianty { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
     .varianta { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); flex-wrap: wrap; }
@@ -659,6 +676,34 @@ function spolecnaOkna(od, doDne, minDelka) {
 const nazevCesty = (c) => c.destinace || `cesta ${fmtRozsah(c.zacatek, c.konec)}`;
 const MAX_DESTINACI = 3;  // kolik destinací smí každý navrhnout k jednomu termínu
 
+// Kdo u otevřeného návrhu ještě něco dluží. Povinní jsou Jana, Jakub a Lukáš, Matěj je nepovinný.
+// destinace: kdo zatím nenavrhl žádnou destinaci; hlasy: kdo neohodnotil všechny destinace (a kolik mu chybí)
+function stavNavrhu(c) {
+  const dest = stav.destinace.filter(d => d.cesta_id === c.id);
+  const kdoNavrhl = new Set(dest.map(d => osobaZeJmena(d.navrhl)));
+  const chybiHlasu = (o) => dest.filter(d => !stav.hlasy.some(h => h.destinace_id === d.id && osobaZeJmena(h.kdo) === o)).length;
+  const osoby = OSOBY.map(o => ({
+    key: o.key,
+    povinny: RODINA_DOMA.includes(o.key),
+    bezDestinace: !kdoNavrhl.has(o.key),
+    chybiHlasu: chybiHlasu(o.key),
+  }));
+  const povinni = osoby.filter(o => o.povinny);
+  return {
+    dest, osoby,
+    chybiDestinace: povinni.filter(o => o.bezDestinace).map(o => o.key),
+    chybiHlasy: povinni.filter(o => o.chybiHlasu > 0).map(o => o.key),
+    hotovo: dest.length > 0 && povinni.every(o => !o.bezDestinace && o.chybiHlasu === 0),
+  };
+}
+// otevřené návrhy s nadcházejícím termínem
+const otevreneNavrhy = () => stav.cesty.filter(c => c.stav === 'navrh' && c.konec >= DNES).sort((a, b) => a.zacatek.localeCompare(b.zacatek));
+// kolik otevřených návrhů čeká na přihlášeného (destinace nebo hodnocení)
+const cekaNaMe = () => !stav.ja ? 0 : otevreneNavrhy().filter(c => {
+  const o = stavNavrhu(c).osoby.find(x => x.key === stav.ja.key);
+  return o.bezDestinace || o.chybiHlasu > 0;
+}).length;
+
 function horizont() {
   const konce = [...stav.volno.map(r => r.konec), ...stav.svatky.map(s => s.datum)];
   const max = konce.length ? konce.reduce((a, b) => a > b ? a : b) : plus(DNES, 365);
@@ -685,6 +730,8 @@ const app = document.getElementById('app');
 function prekresli() {
   prepocti();
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === stav.view));
+  const n = cekaNaMe(), tab = document.querySelector('#tabs [data-view="cesty"]');
+  tab.innerHTML = 'Cesty a hlasování' + (n ? ` <span class="odznak" title="Čeká na tebe ${n}× – destinace nebo hodnocení">${n}</span>` : '');
   const v = { prehled: viewPrehled, okna: viewOkna, cesty: viewCesty, jana: viewJana, upravy: viewUpravy }[stav.view];
   app.innerHTML = `<div class="view">${v()}</div>`;
 }
@@ -771,8 +818,44 @@ function viewPrehled() {
     </div>`;
   }).join('');
 
+  // otevřené návrhy cest: co ještě chybí (destinace / hodnocení), zvýrazněné, když čekají na přihlášeného
+  const jmenaOsob = (keys) => keys.map(k => `<b style="color:${OSOBA[k].barva}">${OSOBA[k].jmeno}</b>`).join(', ');
+  const navrhyHtml = otevreneNavrhy().map(c => {
+    const st = stavNavrhu(c);
+    const ja = stav.ja && st.osoby.find(o => o.key === stav.ja.key);
+    const naMe = ja && (ja.bezDestinace || ja.chybiHlasu > 0);
+    const matej = st.osoby.find(o => o.key === 'matej');
+    const radky = [];
+    if (naMe) {
+      const co = [ja.bezDestinace && 'přidej svoje destinace', ja.chybiHlasu && `ohodnoť ${ja.chybiHlasu} ${ja.chybiHlasu === 1 ? 'destinaci' : ja.chybiHlasu < 5 ? 'destinace' : 'destinací'}`].filter(Boolean).join(' a ');
+      radky.push(`<div class="na-me">👉 Na tobě: ${co}${ja.key === 'matej' ? ' (nepovinné)' : ''}</div>`);
+    }
+    if (st.chybiDestinace.length) radky.push(`<div>Chybí destinace od: ${jmenaOsob(st.chybiDestinace)}</div>`);
+    if (st.dest.length && st.chybiHlasy.length) radky.push(`<div>Čeká se na hodnocení: ${jmenaOsob(st.chybiHlasy)}</div>`);
+    if (!st.dest.length) radky.push(`<div>Zatím žádná destinace – hlasovat není o čem.</div>`);
+    if (st.hotovo) {
+      const prum = (d) => { const hl = stav.hlasy.filter(h => h.destinace_id === d.id); return hl.reduce((a, h) => a + h.hodnoceni, 0) / hl.length; };
+      const vede = [...st.dest].sort((a, b) => prum(b) - prum(a))[0];
+      radky.push(`<div class="hotovo">✓ Všichni povinní hlasovali – vede ${esc(vede.zeme)}. Můžete vybrat destinaci a potvrdit cestu.</div>`);
+    }
+    if (st.dest.length && (matej.bezDestinace || matej.chybiHlasu)) radky.push(`<div class="nepovinne">Matěj (nepovinné): ${[matej.bezDestinace && 'bez destinace', matej.chybiHlasu && `chybí ${matej.chybiHlasu} hodnocení`].filter(Boolean).join(', ')}</div>`);
+    const dl = pocetDni(c.zacatek, c.konec);
+    return `<div class="navrh-stav${naMe ? ' ceka' : st.hotovo ? ' hotovy' : ''}">
+      <div class="main">
+        <div class="t">${fmtRozsah(c.zacatek, c.konec)} · ${dl} ${dniSlovo(dl)}${c.poznamka ? ` <span class="d">– ${esc(c.poznamka)}</span>` : ''}</div>
+        <div class="radky">${radky.join('')}</div>
+      </div>
+      <button class="btn small${naMe || st.hotovo ? ' primary' : ''}" data-akce="otevrit-navrh" data-id="${c.id}">${naMe ? 'Hlasovat' : 'Otevřít'}</button>
+    </div>`;
+  }).join('');
+
   const posun = (n) => { const d = D(zacatek); d.setUTCMonth(d.getUTCMonth() + n); return iso(d); };
   return `
+    ${navrhyHtml ? `<div class="panel panel-navrhy">
+      <h2>🗳️ Rozpracované návrhy cest</h2>
+      <div class="sub">Neuzavřené termíny: kdo ještě nenavrhl destinace nebo neohodnotil všechny destinace. Povinně Jana, Jakub a Lukáš, Matěj nepovinně.</div>
+      ${navrhyHtml}
+    </div>` : ''}
     <div class="panel">
       <div class="row" style="margin-bottom:6px">
         <h2>Kdo je kde</h2><div class="spacer"></div>
@@ -886,7 +969,7 @@ function viewCesty() {
     };
 
     return `
-      <div class="cesta ${c.stav}">
+      <div class="cesta ${c.stav}" id="cesta-${c.id}">
         <div class="hlava">
           <div>
             <div class="nazev">${c.stav === 'potvrzena' && c.destinace ? esc(c.destinace) + ' · ' : ''}${fmtRozsah(c.zacatek, c.konec)} ${stavPill}</div>
@@ -1289,6 +1372,14 @@ app.addEventListener('click', async (e) => {
   else if (a === 'zamitnout') proved(() => zmenStavCesty(najdi(stav.cesty, id), 'zamitnuta'));
   else if (a === 'vratit') proved(() => zmenStavCesty(najdi(stav.cesty, id), 'navrh'));
   else if (a === 'pridat-destinaci') otevriDestinaci(Number(id));
+  else if (a === 'otevrit-navrh') {
+    stav.view = 'cesty';
+    try { localStorage.setItem('planovac-view', stav.view); } catch (_) {}
+    prekresli();
+    const k = document.getElementById('cesta-' + id);
+    // odrolovat na kartu (pod přilepené záložky)
+    if (k) { window.scrollTo(0, k.getBoundingClientRect().top + window.scrollY - 60); k.classList.add('blik'); setTimeout(() => k.classList.remove('blik'), 1600); }
+  }
   else if (a === 'upravit-destinaci') { const d = najdi(stav.destinace, el.dataset.did); otevriDestinaci(d.cesta_id, d); }
   else if (a === 'smazat-destinaci') {
     const d = najdi(stav.destinace, el.dataset.did);
