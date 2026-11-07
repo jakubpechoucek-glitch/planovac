@@ -1,6 +1,7 @@
 -- Plánovač: tabulky a pravidla přístupu
 -- V Supabase (projekt Rozcestníku unoefgbzymlwwehgzusf) aplikováno 7. 11. 2026
--- jako migrace planovac_tabulky, planovac_volno_cesta planovac_sluzebni_cesta a planovac_vyuka_pres_svatek (7. 11. 2026).
+-- jako migrace planovac_tabulky, planovac_volno_cesta planovac_sluzebni_cesta, planovac_vyuka_pres_svatek a planovac_varianty_destinaci (7. 11. 2026).
+-- Pozn.: původní plan_hlasy (hlas k celé cestě, s komentářem) nahradila migrace planovac_varianty_destinaci – viz konec souboru.
 -- Funkce je_clen() a moje_jmeno() a tabulka clenove pochází z Rozcestníku.
 
 -- ── Tabulky ──
@@ -128,3 +129,65 @@ create policy "svuj hlas smazani" on public.plan_hlasy for delete to authenticat
 insert into public.plan_nastaveni (klic, hodnota) values
   ('jana_narok', '25'::jsonb),
   ('jakub_volno_od', '"2027-01-01"'::jsonb);
+
+-- ── Migrace planovac_varianty_destinaci ──
+-- Cesta = termín; ke každému termínu navrhne každý člen až 3 destinace (státy)
+-- a všichni hodnotí každou destinaci 1–5 hvězdičkami.
+
+-- plan_cesty.destinace = vybraná destinace (vyplní se při potvrzení), u návrhu může chybět
+alter table public.plan_cesty alter column destinace drop not null;
+
+create table public.plan_destinace (
+  id bigint generated always as identity primary key,
+  cesta_id bigint not null references public.plan_cesty(id) on delete cascade,
+  zeme text not null,
+  detail text not null default '',
+  navrhl text,
+  vytvoreno timestamptz default now()
+);
+create index plan_destinace_cesta_id on public.plan_destinace(cesta_id);
+
+-- navrhl = přihlášený člen (nastaví server), nejvýš 3 destinace na člena a termín
+create or replace function public.plan_destinace_navrhl() returns trigger
+language plpgsql security definer set search_path to 'public' as $$
+begin
+  if tg_op = 'INSERT' then
+    new.navrhl := coalesce(public.moje_jmeno(), new.navrhl);
+    new.vytvoreno := now();
+    if (select count(*) from public.plan_destinace
+        where cesta_id = new.cesta_id and navrhl = new.navrhl) >= 3 then
+      raise exception 'Každý může k termínu navrhnout nejvýš 3 destinace';
+    end if;
+  else
+    new.navrhl := old.navrhl;
+    new.cesta_id := old.cesta_id;
+    new.vytvoreno := old.vytvoreno;
+  end if;
+  return new;
+end $$;
+create trigger plan_destinace_navrhl before insert or update on public.plan_destinace
+  for each row execute function public.plan_destinace_navrhl();
+
+alter table public.plan_destinace enable row level security;
+create policy "rodina cte"      on public.plan_destinace for select to authenticated using (je_clen());
+create policy "rodina navrhuje" on public.plan_destinace for insert to authenticated with check (je_clen());
+create policy "svoje upravy"    on public.plan_destinace for update to authenticated using (je_clen() and navrhl = moje_jmeno()) with check (je_clen());
+create policy "svoje smazani"   on public.plan_destinace for delete to authenticated using (je_clen() and navrhl = moje_jmeno());
+
+-- hlasy nově k destinaci (dosud žádné hlasy nebyly, tabulka se přestavěla)
+drop table public.plan_hlasy;
+create table public.plan_hlasy (
+  destinace_id bigint not null references public.plan_destinace(id) on delete cascade,
+  kdo text not null,
+  hodnoceni int not null check (hodnoceni between 1 and 5),
+  upraveno timestamptz default now(),
+  primary key (destinace_id, kdo)
+);
+create trigger plan_hlasy_kdo before insert or update on public.plan_hlasy
+  for each row execute function public.plan_hlasy_kdo();
+alter table public.plan_hlasy enable row level security;
+create policy "rodina cte"        on public.plan_hlasy for select to authenticated using (je_clen());
+create policy "svuj hlas"         on public.plan_hlasy for insert to authenticated with check (je_clen());
+create policy "svuj hlas uprava"  on public.plan_hlasy for update to authenticated using (je_clen() and kdo = moje_jmeno()) with check (je_clen());
+create policy "svuj hlas smazani" on public.plan_hlasy for delete to authenticated using (je_clen() and kdo = moje_jmeno());
+-- (převod 2 existujících cest: Ischgl → varianta 🇦🇹 Rakousko / Ischgl; otázka u únorového termínu → poznámka)

@@ -212,6 +212,23 @@
     .termin .t { font-weight: 700; font-size: .85rem; }
     .termin .d { font-size: .72rem; color: var(--muted); margin-top: 2px; }
 
+    /* ── Varianty destinací ── */
+    .varianty { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+    .varianta { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); flex-wrap: wrap; }
+    .varianta + .varianta { margin-top: 6px; }
+    .varianta.vede { background: #ecfdf5; box-shadow: inset 0 0 0 1px #a7f3d0; }
+    .varianta.vybrana { background: #dcfce7; }
+    .varianta .poradi { width: 18px; text-align: center; font-weight: 800; color: var(--muted); }
+    .varianta .main { flex: 1; min-width: 160px; }
+    .varianta .zeme { font-weight: 700; font-size: .92rem; }
+    .varianta .detail { font-weight: 400; color: var(--muted); font-size: .8rem; }
+    .varianta .kdo { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .varianta .ostatni span { margin-right: 8px; white-space: nowrap; color: #b45309; }
+    .skore-d { text-align: right; min-width: 40px; }
+    .skore-d b { font-size: 1.05rem; }
+    .skore-d small { display: block; font-size: .65rem; color: var(--muted); }
+    .akce-d { display: flex; gap: 2px; }
+
     /* ── Cesty ── */
     .cesta { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
     .cesta + .cesta { margin-top: 10px; }
@@ -314,16 +331,29 @@
 <!-- ── Dialog: cesta ── -->
 <dialog id="dlg-cesta">
   <form method="dialog" id="form-cesta">
-    <h3 id="dlg-cesta-titul">Navrhnout cestu</h3>
-    <label>Země
-      <select name="destinace" required></select>
-    </label>
+    <h3 id="dlg-cesta-titul">Navrhnout termín</h3>
     <div class="two">
       <label>Odjezd <input type="date" name="zacatek" required></label>
       <label>Návrat <input type="date" name="konec" required></label>
     </div>
-    <label>Poznámka / detail <textarea name="poznamka" rows="2" placeholder="Místo a ubytování lze doplnit později – proč právě tam, rozpočet, odkaz…"></textarea></label>
+    <label>Poznámka <textarea name="poznamka" rows="2" placeholder="Např. Vánoce, i s Matějem; rozpočet…"></textarea></label>
+    <fieldset id="moje-destinace" style="border:none;display:flex;flex-direction:column;gap:6px">
+      <label style="margin:0">Moje tipy na destinace (až 3, další můžete přidat i později)</label>
+      <select name="d1"></select><select name="d2"></select><select name="d3"></select>
+    </fieldset>
     <div class="hint" id="cesta-hint"></div>
+    <div class="actions">
+      <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
+      <button type="submit" class="btn primary" value="ok">Uložit</button>
+    </div>
+  </form>
+</dialog>
+<!-- ── Dialog: destinace ── -->
+<dialog id="dlg-destinace">
+  <form method="dialog" id="form-destinace">
+    <h3 id="dlg-destinace-titul">Moje destinace</h3>
+    <label>Země <select name="zeme" required></select></label>
+    <label>Detail (nepovinné) <input name="detail" placeholder="Místo lze doplnit i později, např. Hokkaido"></label>
     <div class="actions">
       <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
       <button type="submit" class="btn primary" value="ok">Uložit</button>
@@ -440,18 +470,31 @@ function demoData() {
   for (const dd of [16, 17, 18]) svatky.push({ id: id++, datum: d(y, 11, dd), nazev: 'ASEAN Summit (ukázka)', zdroj: 'ukázka' });
   volno.push(v('lukas', d(y, 11, 17), d(y, 11, 18), 'vyuka', 'ISM učí i přes ASEAN svátky'));
   const cesty = [
-    { id: 901, destinace: '🇵🇭 Filipíny', zacatek: d(y + 1, 3, 20), konec: d(y + 1, 3, 26), poznamka: 'Bohol – Panglao, potápění s želvami', stav: 'potvrzena', pridal: 'Jana' },
-    { id: 902, destinace: '🇻🇳 Vietnam', zacatek: d(y, 12, 19), konec: d(y, 12, 28), poznamka: 'Vánoce v Da Nangu a Hoi Anu, i s Matějem', stav: 'navrh', pridal: 'Jakub' },
-    { id: 903, destinace: '🇮🇩 Indonésie', zacatek: d(y, 12, 19), konec: d(y + 1, 1, 1), poznamka: 'Bali', stav: 'navrh', pridal: 'Lukáš' },
+    { id: 901, destinace: '🇵🇭 Filipíny – Bohol', zacatek: d(y + 1, 3, 20), konec: d(y + 1, 3, 26), poznamka: 'Panglao, potápění s želvami', stav: 'potvrzena', pridal: 'Jana' },
+    { id: 902, destinace: null, zacatek: d(y, 12, 19), konec: d(y, 12, 28), poznamka: 'Vánoce, i s Matějem', stav: 'navrh', pridal: 'Jakub' },
+    { id: 903, destinace: null, zacatek: d(y + 1, 6, 5), konec: d(y + 1, 6, 20), poznamka: 'Začátek léta, než Matěj přiletí', stav: 'navrh', pridal: 'Jana' },
   ];
+  const ds = (id, cesta_id, zeme, detail, navrhl) => ({ id, cesta_id, zeme, detail, navrhl });
+  const destinace = [
+    ds(801, 901, '🇵🇭 Filipíny', 'Bohol', 'Jana'),
+    ds(811, 902, '🇻🇳 Vietnam', 'Da Nang a Hoi An', 'Jakub'),
+    ds(812, 902, '🇯🇵 Japonsko', 'Hokkaido – lyže', 'Jakub'),
+    ds(813, 902, '🇮🇩 Indonésie', 'Bali – surf', 'Lukáš'),
+    ds(814, 902, '🇦🇺 Austrálie', '', 'Lukáš'),
+    ds(815, 902, '🇹🇭 Thajsko', 'Krabi', 'Jana'),
+    ds(816, 902, '🇹🇼 Taiwan', '', 'Matěj'),
+    ds(821, 903, '🇰🇷 Jižní Korea', 'Soul a Busan', 'Jana'),
+  ];
+  const hl = (destinace_id, kdo, hodnoceni) => ({ destinace_id, kdo, hodnoceni });
   const hlasy = [
-    { cesta_id: 902, kdo: 'Jakub', hodnoceni: 5, komentar: 'Jídlo!' },
-    { cesta_id: 902, kdo: 'Matěj', hodnoceni: 4, komentar: '' },
-    { cesta_id: 903, kdo: 'Lukáš', hodnoceni: 5, komentar: 'Surfování' },
-    { cesta_id: 903, kdo: 'Jana', hodnoceni: 3, komentar: 'Moc dlouhé na moji dovolenou' },
-    { cesta_id: 901, kdo: 'Jana', hodnoceni: 5, komentar: '' },
+    hl(801, 'Jana', 5), hl(801, 'Lukáš', 4),
+    hl(811, 'Jakub', 5), hl(811, 'Matěj', 4), hl(811, 'Jana', 3),
+    hl(812, 'Lukáš', 5), hl(812, 'Matěj', 5), hl(812, 'Jana', 2),
+    hl(813, 'Lukáš', 5), hl(813, 'Jana', 3),
+    hl(815, 'Jana', 5), hl(815, 'Jakub', 3),
+    hl(816, 'Matěj', 4),
   ];
-  return { volno, svatky, cesty, hlasy, nastaveni: { jana_narok: 25, jakub_volno_od: `${y + 1}-01-01` } };
+  return { volno, svatky, cesty, destinace, hlasy, nastaveni: { jana_narok: 25, jakub_volno_od: `${y + 1}-01-01` } };
 }
 
 // ── Datová vrstva ────────────────────────────────────────
@@ -468,7 +511,10 @@ const api = DEMO ? (() => {
     async pridejCestu(r) { return { ...r, id: ++seq, stav: 'navrh', pridal: stav.ja?.jmeno || 'Ukázka' }; },
     async upravCestu(id, r) { return { ...stav.cesty.find(x => x.id === id), ...r }; },
     async smazCestu() {},
-    async hlasuj(cesta_id, hodnoceni, komentar) { return { cesta_id, kdo: stav.ja.jmenoCele, hodnoceni, komentar }; },
+    async pridejDestinaci(r) { return { ...r, id: ++seq, navrhl: stav.ja.jmenoCele }; },
+    async upravDestinaci(id, r) { return { ...stav.destinace.find(x => x.id === id), ...r }; },
+    async smazDestinaci() {},
+    async hlasuj(destinace_id, hodnoceni) { return { destinace_id, kdo: stav.ja.jmenoCele, hodnoceni }; },
     async ulozNastaveni() {},
   };
 })() : (() => {
@@ -478,15 +524,16 @@ const api = DEMO ? (() => {
   const smazano = (r) => { if (!ok(r)?.length) throw new Error('Záznam se v databázi nesmazal.'); };
   return {
     async nacti() {
-      const [v, s, c, h, n] = await Promise.all([
+      const [v, s, c, d, h, n] = await Promise.all([
         db().from('plan_volno').select('*').order('zacatek'),
         db().from('plan_svatky').select('*').order('datum'),
         db().from('plan_cesty').select('*').order('zacatek'),
+        db().from('plan_destinace').select('*').order('id'),
         db().from('plan_hlasy').select('*'),
         db().from('plan_nastaveni').select('*'),
       ]);
       const nastaveni = Object.fromEntries(ok(n).map(r => [r.klic, r.hodnota]));
-      return { volno: ok(v), svatky: ok(s), cesty: ok(c), hlasy: ok(h), nastaveni };
+      return { volno: ok(v), svatky: ok(s), cesty: ok(c), destinace: ok(d), hlasy: ok(h), nastaveni };
     },
     async pridejVolno(r) { return ok(await db().from('plan_volno').insert(r).select().single()); },
     async upravVolno(id, r) { return ok(await db().from('plan_volno').update(r).eq('id', id).select().single()); },
@@ -496,10 +543,14 @@ const api = DEMO ? (() => {
     async pridejCestu(r) { return ok(await db().from('plan_cesty').insert(r).select().single()); },
     async upravCestu(id, r) { return ok(await db().from('plan_cesty').update(r).eq('id', id).select().single()); },
     async smazCestu(id) { smazano(await db().from('plan_cesty').delete().eq('id', id).select('id')); },
-    async hlasuj(cesta_id, hodnoceni, komentar) {
+    // navrhl = přihlášený člen a limit 3 destinace na člena hlídá server
+    async pridejDestinaci(r) { return ok(await db().from('plan_destinace').insert(r).select().single()); },
+    async upravDestinaci(id, r) { return ok(await db().from('plan_destinace').update(r).eq('id', id).select().single()); },
+    async smazDestinaci(id) { smazano(await db().from('plan_destinace').delete().eq('id', id).select('id')); },
+    async hlasuj(destinace_id, hodnoceni) {
       // kdo = přihlášený člen, nastaví ho server
       return ok(await db().from('plan_hlasy')
-        .upsert({ cesta_id, kdo: stav.ja.jmenoCele, hodnoceni, komentar }, { onConflict: 'cesta_id,kdo' })
+        .upsert({ destinace_id, kdo: stav.ja.jmenoCele, hodnoceni }, { onConflict: 'destinace_id,kdo' })
         .select().single());
     },
     async ulozNastaveni(klic, hodnota) {
@@ -509,7 +560,7 @@ const api = DEMO ? (() => {
 })();
 
 // ── Stav a odvozené indexy ───────────────────────────────
-const stav = { volno: [], svatky: [], cesty: [], hlasy: [], nastaveni: {}, ja: null, view: 'prehled' };
+const stav = { volno: [], svatky: [], cesty: [], destinace: [], hlasy: [], nastaveni: {}, ja: null, view: 'prehled' };
 let idx = null;
 
 function prepocti() {
@@ -604,6 +655,10 @@ function spolecnaOkna(od, doDne, minDelka) {
   return okna;
 }
 
+// Název cesty: vybraná destinace (u potvrzené), jinak termín
+const nazevCesty = (c) => c.destinace || `cesta ${fmtRozsah(c.zacatek, c.konec)}`;
+const MAX_DESTINACI = 3;  // kolik destinací smí každý navrhnout k jednomu termínu
+
 function horizont() {
   const konce = [...stav.volno.map(r => r.konec), ...stav.svatky.map(s => s.datum)];
   const max = konce.length ? konce.reduce((a, b) => a > b ? a : b) : plus(DNES, 365);
@@ -683,7 +738,7 @@ function viewPrehled() {
     if (potvrzene.some(c => c.konec >= dnyM[0] && c.zacatek <= dnyM[n - 1])) {
       radku++;
       h += `<div class="lbl" style="color:var(--cesta)">Cesty</div>`;
-      h += dnyM.map(s => { const c = cestaVDen(s); return c ? `<div class="cell rodcesta" title="${esc(c.destinace)}"></div>` : `<div class="cell prazdna"></div>`; }).join('');
+      h += dnyM.map(s => { const c = cestaVDen(s); return c ? `<div class="cell rodcesta" title="${esc(nazevCesty(c))}"></div>` : `<div class="cell prazdna"></div>`; }).join('');
     }
     // rámečky přes všechny řádky; useknutá strana (pokračuje v dalším/předchozím měsíci) je čárkovaná
     for (const [a, b] of ramecky) {
@@ -700,7 +755,7 @@ function viewPrehled() {
   // kdo je kde: nadcházející soukromé a služební cesty jednotlivců a potvrzené rodinné cesty
   const cestyPryc = [
     ...stav.volno.filter(r => TYPY_PRYC.includes(r.typ) && r.konec >= DNES).map(r => ({ ...r, kdo: OSOBA[r.osoba] })),
-    ...potvrzene.filter(c => c.konec >= DNES).map(c => ({ ...c, typ: 'rodina', popis: c.destinace })),
+    ...potvrzene.filter(c => c.konec >= DNES).map(c => ({ ...c, typ: 'rodina', popis: nazevCesty(c) })),
   ].sort((x, y) => x.zacatek.localeCompare(y.zacatek)).slice(0, 12);
   const kdoKde = cestyPryc.map(r => {
     const dl = pocetDni(r.zacatek, r.konec);
@@ -787,14 +842,12 @@ function viewOkna() {
 
 // ── Cesty a hlasování ──
 function viewCesty() {
-  const hlasyCesty = (id) => stav.hlasy.filter(h => h.cesta_id === id);
   const prumer = (hl) => hl.length ? hl.reduce((a, h) => a + h.hodnoceni, 0) / hl.length : 0;
-  const hvezdy = (n) => `<span class="hvezdy">${'★'.repeat(n)}<span class="off">${'★'.repeat(5 - n)}</span></span>`;
   const ja = stav.ja;
+  const jeMoje = (jmeno) => ja && osobaZeJmena(jmeno) === ja.key;
+  const krestni = (jmeno) => (jmeno || '').split(' ')[0] || '—';
 
   const karta = (c) => {
-    const hl = hlasyCesty(c.id);
-    const muj = ja && hl.find(h => osobaZeJmena(h.kdo) === ja.key);
     const delka = pocetDni(c.zacatek, c.konec);
     const janaDov = janaPotrebuje(c.zacatek, c.konec, c.stav === 'potvrzena' ? c.id : null);
     const kdoNemuze = RODINA_DOMA.filter(o => o !== 'jana').filter(o => [...dny(c.zacatek, c.konec)].some(s => !jeDostupny(o, s)));
@@ -802,28 +855,42 @@ function viewCesty() {
     const matejDny = [...dny(c.zacatek, c.konec)].filter(s => jeDostupny('matej', s)).length;
     const stavPill = c.stav === 'potvrzena' ? '<span class="pill green">potvrzeno</span>'
       : c.stav === 'zamitnuta' ? '<span class="pill grey">zamítnuto</span>' : '<span class="pill blue">návrh</span>';
-    const hlasBunky = OSOBY.map(o => {
-      const h = hl.find(x => osobaZeJmena(x.kdo) === o.key);
-      if (ja && o.key === ja.key && c.stav === 'navrh') {
-        return `<div class="hlas moje">
-          <div class="kdo"><span class="dot" style="background:${o.barva}"></span>${o.jmeno} (ty)</div>
-          <div class="hvezdy">${[1, 2, 3, 4, 5].map(n => `<button data-akce="hlas" data-id="${c.id}" data-n="${n}" class="${muj && n <= muj.hodnoceni ? 'on' : ''}" title="${n} z 5">★</button>`).join('')}</div>
-          <input data-akce="komentar" data-id="${c.id}" placeholder="komentář…" value="${esc(muj?.komentar || '')}" style="width:100%;margin-top:4px;font-size:.75rem;padding:4px 6px">
-        </div>`;
-      }
-      return `<div class="hlas">
-        <div class="kdo"><span class="dot" style="background:${o.barva}"></span>${o.jmeno}</div>
-        ${h ? hvezdy(h.hodnoceni) : '<span style="color:var(--muted)">zatím nehlasoval(a)</span>'}
-        ${h?.komentar ? `<div class="koment">${esc(h.komentar)}</div>` : ''}
+    const otevrena = c.stav === 'navrh';
+
+    // varianty destinací seřazené podle průměru hvězdiček
+    const varianty = stav.destinace.filter(d => d.cesta_id === c.id).map(d => {
+      const hl = stav.hlasy.filter(h => h.destinace_id === d.id);
+      return { ...d, hl, prumer: prumer(hl) };
+    }).sort((a, b) => b.prumer - a.prumer || b.hl.length - a.hl.length || a.id - b.id);
+    const mojich = varianty.filter(d => jeMoje(d.navrhl)).length;
+    const vitez = varianty.find(d => d.hl.length);
+
+    const radek = (d, i) => {
+      const muj = ja && d.hl.find(h => osobaZeJmena(h.kdo) === ja.key);
+      const ostatni = d.hl.filter(h => !ja || osobaZeJmena(h.kdo) !== ja.key)
+        .map(h => { const o = OSOBA[osobaZeJmena(h.kdo)]; return `<span title="${esc(h.kdo)}"><span class="dot" style="background:${o?.barva || '#999'};display:inline-block;width:7px;height:7px"></span> ${esc(o?.jmeno || krestni(h.kdo))} ${'★'.repeat(h.hodnoceni)}</span>`; }).join('');
+      const vybrana = c.stav === 'potvrzena' && c.destinace && c.destinace.startsWith(d.zeme);
+      return `<div class="varianta${d === vitez && otevrena ? ' vede' : ''}${vybrana ? ' vybrana' : ''}">
+        <div class="poradi">${d.hl.length ? i + 1 : '·'}</div>
+        <div class="main">
+          <div class="zeme">${esc(d.zeme)}${d.detail ? ` <span class="detail">${esc(d.detail)}</span>` : ''}${d === vitez && otevrena ? ' <span class="pill green">vede</span>' : ''}${vybrana ? ' <span class="pill green">vybráno</span>' : ''}</div>
+          <div class="kdo">navrhl(a) ${esc(OSOBA[osobaZeJmena(d.navrhl)]?.jmeno || krestni(d.navrhl))}${ostatni ? ' · ' : ''}<span class="ostatni">${ostatni}</span></div>
+        </div>
+        ${otevrena && ja ? `<div class="hvezdy" title="Tvoje hodnocení">${[1, 2, 3, 4, 5].map(n => `<button data-akce="hlas" data-did="${d.id}" data-n="${n}" class="${muj && n <= muj.hodnoceni ? 'on' : ''}" title="${n} z 5">★</button>`).join('')}</div>` : ''}
+        <div class="skore-d"><b>${d.hl.length ? d.prumer.toFixed(1).replace('.', ',') : '–'}</b><small>${d.hl.length} z 4</small></div>
+        <div class="akce-d">
+          ${otevrena ? `<button class="btn small" data-akce="vybrat" data-id="${c.id}" data-did="${d.id}" title="Vybrat tuto destinaci a potvrdit cestu">✓ Vybrat</button>` : ''}
+          ${otevrena && jeMoje(d.navrhl) ? `<button class="btn small ghost" data-akce="upravit-destinaci" data-did="${d.id}" title="Upravit detail">✎</button><button class="btn small ghost" data-akce="smazat-destinaci" data-did="${d.id}" title="Smazat můj návrh">🗑</button>` : ''}
+        </div>
       </div>`;
-    }).join('');
-    const p = prumer(hl);
+    };
+
     return `
       <div class="cesta ${c.stav}">
         <div class="hlava">
           <div>
-            <div class="nazev">${esc(c.destinace)} ${stavPill}</div>
-            <div class="info">${fmtRozsah(c.zacatek, c.konec)} · ${delka} ${dniSlovo(delka)} · navrhl(a) ${esc((c.pridal || '').split(' ')[0] || '—')}</div>
+            <div class="nazev">${c.stav === 'potvrzena' && c.destinace ? esc(c.destinace) + ' · ' : ''}${fmtRozsah(c.zacatek, c.konec)} ${stavPill}</div>
+            <div class="info">${delka} ${dniSlovo(delka)} · termín navrhl(a) ${esc(krestni(c.pridal))}</div>
             <div class="row" style="margin-top:6px">
               ${janaDov ? `<span class="pill orange">Jana: ${janaDov} ${dniSlovo(janaDov)} dovolené</span>` : '<span class="pill green">Jana bez dovolené</span>'}
               ${janaSluzebne ? `<span class="pill red">Jana ${janaSluzebne} ${dniSlovo(janaSluzebne)} na služební cestě</span>` : ''}
@@ -832,22 +899,28 @@ function viewCesty() {
             </div>
             ${c.poznamka ? `<div class="info" style="margin-top:6px;color:var(--text)">${esc(c.poznamka)}</div>` : ''}
           </div>
-          <div class="skore"><b>${hl.length ? p.toFixed(1).replace('.', ',') : '–'}</b><small>${hl.length} z 4 hlasů</small></div>
         </div>
-        <div class="hlasy">${hlasBunky}</div>
+        <div class="varianty">
+          <div class="row" style="margin-bottom:6px">
+            <b style="font-size:.85rem">Destinace</b>
+            <span style="font-size:.75rem;color:var(--muted)">každý navrhne až ${MAX_DESTINACI}, všichni hodnotí 1–5 ★</span>
+            <div class="spacer"></div>
+            ${otevrena && ja ? (mojich < MAX_DESTINACI
+              ? `<button class="btn small primary" data-akce="pridat-destinaci" data-id="${c.id}">+ Moje destinace (${mojich}/${MAX_DESTINACI})</button>`
+              : `<span class="pill grey">máš ${MAX_DESTINACI}/${MAX_DESTINACI} návrhy</span>`) : ''}
+          </div>
+          ${varianty.length ? varianty.map(radek).join('') : '<div class="empty">Zatím žádná destinace – přidej svoje tipy.</div>'}
+        </div>
         <div class="row" style="margin-top:10px">
-          ${c.stav === 'navrh' ? `<button class="btn small primary" data-akce="potvrdit" data-id="${c.id}">✓ Potvrdit cestu</button>
-            <button class="btn small" data-akce="zamitnout" data-id="${c.id}">Zamítnout</button>` : ''}
-          ${c.stav !== 'navrh' ? `<button class="btn small" data-akce="vratit" data-id="${c.id}">Vrátit mezi návrhy</button>` : ''}
+          ${otevrena ? `<button class="btn small" data-akce="zamitnout" data-id="${c.id}">Zamítnout termín</button>` : `<button class="btn small" data-akce="vratit" data-id="${c.id}">Vrátit mezi návrhy</button>`}
           <div class="spacer"></div>
-          <button class="btn small ghost" data-akce="upravit-cestu" data-id="${c.id}">✎ Upravit</button>
+          <button class="btn small ghost" data-akce="upravit-cestu" data-id="${c.id}">✎ Termín</button>
           <button class="btn small ghost" data-akce="smazat-cestu" data-id="${c.id}">🗑</button>
         </div>
       </div>`;
   };
 
-  const skore = (c) => prumer(hlasyCesty(c.id));
-  const navrhy = stav.cesty.filter(c => c.stav === 'navrh').sort((a, b) => skore(b) - skore(a) || a.zacatek.localeCompare(b.zacatek));
+  const navrhy = stav.cesty.filter(c => c.stav === 'navrh').sort((a, b) => a.zacatek.localeCompare(b.zacatek));
   const potvrzene = stav.cesty.filter(c => c.stav === 'potvrzena').sort((a, b) => a.zacatek.localeCompare(b.zacatek));
   const zamitnute = stav.cesty.filter(c => c.stav === 'zamitnuta');
 
@@ -863,7 +936,7 @@ function viewCesty() {
       <div class="main">
         <div class="t">${fmtRozsah(a, b)}</div>
         <div class="d">${esc(popis) || 'víkend / svátky'}${matej ? ` · Matěj volno ${matej === dl ? 'celou dobu' : matej + ' z ' + dl + ' dní'}` : ''}</div>
-        ${prekryv.length ? `<div class="d">už navrženo: ${prekryv.map(c => esc(c.destinace)).join(', ')}</div>` : ''}
+        ${prekryv.length ? `<div class="d">už navrženo: ${prekryv.map(c => esc(nazevCesty(c))).join(', ')}</div>` : ''}
       </div>
       <button class="btn small${prekryv.length ? '' : ' primary'}" data-akce="navrhnout" data-od="${a}" data-do="${b}">Navrhnout</button>
     </div>`;
@@ -871,15 +944,15 @@ function viewCesty() {
   return `
     <div class="panel">
       <h2>Volné termíny pro celou rodinu</h2>
-      <div class="sub">Podle kalendáře: Jana, Jakub i Lukáš mají volno (bez dovolené navíc) alespoň ${OKNA_MIN} dny a nikdo není na cestě. Klikni na <b>Navrhnout</b> a termín se předvyplní – stačí doplnit destinaci.</div>
+      <div class="sub">Podle kalendáře: Jana, Jakub i Lukáš mají volno (bez dovolené navíc) alespoň ${OKNA_MIN} dny a nikdo není na cestě. Klikni na <b>Navrhnout</b> a termín se předvyplní – stačí přidat svoje tipy na destinace.</div>
       <div class="terminy">${terminy.length ? terminy.map(terminHtml).join('') : '<div class="empty">V zapsaném období žádný takový termín není. Delší okna, kdy by si Jana vzala dovolenou, najdeš v záložce Společná volna.</div>'}</div>
     </div>
     <div class="panel">
       <div class="row" style="margin-bottom:6px">
         <h2>Návrhy cest</h2><div class="spacer"></div>
-        <button class="btn primary" data-akce="navrhnout">+ Navrhnout cestu</button>
+        <button class="btn primary" data-akce="navrhnout">+ Navrhnout termín</button>
       </div>
-      <div class="sub">Každý dá návrhu 1–5 hvězdiček. Seřazeno podle průměru. Potvrzená cesta se zapíše do kalendáře a Janě se odečte dovolená.</div>
+      <div class="sub">Ke každému termínu navrhne každý až ${MAX_DESTINACI} destinace (státy) a všichni hodnotí všechny destinace 1–5 hvězdičkami. Destinace jsou seřazené podle průměru. <b>✓ Vybrat</b> potvrdí cestu s danou destinací, zapíše ji do kalendáře a Janě odečte dovolenou.</div>
       ${navrhy.length ? navrhy.map(karta).join('') : '<div class="empty">Zatím žádné návrhy. Termín vyber z nabídky výše nebo v záložce Společná volna.</div>'}
     </div>
     ${potvrzene.length ? `<div class="panel"><h2 style="margin-bottom:12px">Potvrzené cesty</h2>${potvrzene.map(karta).join('')}</div>` : ''}
@@ -1072,12 +1145,10 @@ const moznostiZemi = Object.entries(ZEME).map(([sk, zeme]) =>
   `<optgroup label="${sk}">${zeme.map(([f, n]) => `<option value="${f} ${n}">${f} ${n}</option>`).join('')}</optgroup>`).join('');
 function otevriCestu(c, od, doDne) {
   upravovanaCesta = c;
-  document.getElementById('dlg-cesta-titul').textContent = c ? 'Upravit cestu' : 'Navrhnout cestu';
-  // starší cesta s volným textem (např. „Ischgl (AUT)") zůstane jako vlastní položka
-  const puvodni = c?.destinace && ![...Object.values(ZEME).flat()].some(([f, n]) => `${f} ${n}` === c.destinace)
-    ? `<option value="${esc(c.destinace)}">${esc(c.destinace)}</option>` : '';
-  formCesta.destinace.innerHTML = `<option value="" disabled>Vyber zemi…</option>${puvodni}${moznostiZemi}`;
-  formCesta.destinace.value = c?.destinace || '';
+  document.getElementById('dlg-cesta-titul').textContent = c ? 'Upravit termín' : 'Navrhnout termín';
+  // nový termín: rovnou až 3 vlastní tipy; při úpravě se destinace mění na kartě
+  document.getElementById('moje-destinace').hidden = !!c || !stav.ja;
+  for (const k of ['d1', 'd2', 'd3']) formCesta[k].innerHTML = `<option value="">— bez tipu —</option>${moznostiZemi}`;
   formCesta.zacatek.value = c?.zacatek || od || '';
   formCesta.konec.value = c?.konec || doDne || '';
   formCesta.poznamka.value = c?.poznamka || '';
@@ -1098,7 +1169,8 @@ formCesta.addEventListener('submit', (e) => {
   e.preventDefault();
   const f = formCesta;
   if (f.konec.value < f.zacatek.value) { toast('Návrat je před odjezdem.', true); return; }
-  const r = { destinace: f.destinace.value.trim(), zacatek: f.zacatek.value, konec: f.konec.value, poznamka: f.poznamka.value.trim() };
+  const r = { zacatek: f.zacatek.value, konec: f.konec.value, poznamka: f.poznamka.value.trim() };
+  const tipy = [...new Set(['d1', 'd2', 'd3'].map(k => f[k].value).filter(Boolean))];
   dlgCesta.close();
   proved(async () => {
     if (upravovanaCesta) {
@@ -1107,14 +1179,47 @@ formCesta.addEventListener('submit', (e) => {
       // potvrzená cesta: přepsat i Janinu dovolenou
       const dov = stav.volno.find(v => v.cesta_id === u.id);
       if (dov) {
-        const v = await api.upravVolno(dov.id, { zacatek: u.zacatek, konec: u.konec, popis: 'Cesta: ' + u.destinace });
+        const v = await api.upravVolno(dov.id, { zacatek: u.zacatek, konec: u.konec, popis: 'Cesta: ' + nazevCesty(u) });
         stav.volno = stav.volno.map(x => x.id === v.id ? v : x);
       }
     } else {
-      stav.cesty.push(await api.pridejCestu(r));
+      const c = await api.pridejCestu(r);
+      stav.cesty.push(c);
+      for (const zeme of tipy) stav.destinace.push(await api.pridejDestinaci({ cesta_id: c.id, zeme, detail: '' }));
       stav.view = 'cesty';
     }
-  }, upravovanaCesta ? 'Cesta upravena' : 'Návrh přidán – můžete hlasovat');
+  }, upravovanaCesta ? 'Termín upraven' : 'Termín přidán – navrhujte destinace a hlasujte');
+});
+
+// dialog destinace (moje varianta k termínu)
+const dlgDestinace = document.getElementById('dlg-destinace');
+const formDestinace = document.getElementById('form-destinace');
+let destinaceProCestu = null, upravovanaDestinace = null;
+function otevriDestinaci(cestaId, d = null) {
+  destinaceProCestu = cestaId; upravovanaDestinace = d;
+  document.getElementById('dlg-destinace-titul').textContent = d ? 'Upravit moji destinaci' : 'Přidat moji destinaci';
+  // starší destinace mimo seznam (volný text) zůstane jako vlastní položka
+  const mimo = d && !Object.values(ZEME).flat().some(([f, n]) => `${f} ${n}` === d.zeme) ? `<option>${esc(d.zeme)}</option>` : '';
+  formDestinace.zeme.innerHTML = `<option value="" disabled>Vyber zemi…</option>${mimo}${moznostiZemi}`;
+  formDestinace.zeme.value = d?.zeme || '';
+  formDestinace.detail.value = d?.detail || '';
+  dlgDestinace.showModal();
+}
+formDestinace.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const r = { zeme: formDestinace.zeme.value, detail: formDestinace.detail.value.trim() };
+  if (!upravovanaDestinace && stav.destinace.some(d => d.cesta_id === destinaceProCestu && d.zeme === r.zeme)) {
+    toast('Tahle země už je u termínu navržená – stačí jí dát hvězdičky.', true); return;
+  }
+  dlgDestinace.close();
+  proved(async () => {
+    if (upravovanaDestinace) {
+      const u = await api.upravDestinaci(upravovanaDestinace.id, r);
+      stav.destinace = stav.destinace.map(x => x.id === u.id ? u : x);
+    } else {
+      stav.destinace.push(await api.pridejDestinaci({ cesta_id: destinaceProCestu, ...r }));
+    }
+  }, 'Uloženo');
 });
 
 // dialog svátku
@@ -1132,12 +1237,13 @@ formSvatek.addEventListener('submit', (e) => {
 });
 document.querySelectorAll('[data-zavrit]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 
-async function zmenStavCesty(c, novy) {
-  const u = await api.upravCestu(c.id, { stav: novy });
+// destinace = vybraná varianta (jen při potvrzení); návrat mezi návrhy výběr zruší
+async function zmenStavCesty(c, novy, destinace = null) {
+  const u = await api.upravCestu(c.id, { stav: novy, destinace: novy === 'potvrzena' ? destinace : null });
   stav.cesty = stav.cesty.map(x => x.id === u.id ? u : x);
   const dov = stav.volno.find(v => v.cesta_id === c.id);
   if (novy === 'potvrzena' && !dov) {
-    stav.volno.push(await api.pridejVolno({ osoba: 'jana', zacatek: c.zacatek, konec: c.konec, typ: 'dovolena', popis: 'Cesta: ' + c.destinace, zdroj: 'cesta', cesta_id: c.id }));
+    stav.volno.push(await api.pridejVolno({ osoba: 'jana', zacatek: c.zacatek, konec: c.konec, typ: 'dovolena', popis: 'Cesta: ' + nazevCesty(u), zdroj: 'cesta', cesta_id: c.id }));
   } else if (novy !== 'potvrzena' && dov) {
     await api.smazVolno(dov.id);
     stav.volno = stav.volno.filter(v => v.id !== dov.id);
@@ -1163,28 +1269,41 @@ app.addEventListener('click', async (e) => {
   else if (a === 'upravit-cestu') otevriCestu(najdi(stav.cesty, id));
   else if (a === 'smazat-cestu') {
     const c = najdi(stav.cesty, id);
-    if (!await potvrd(`Smazat cestu „${c.destinace}" i se všemi hlasy?` + (c.stav === 'potvrzena' ? ' Janě se vrátí dovolená.' : ''))) return;
+    if (!await potvrd(`Smazat ${nazevCesty(c)} i se všemi destinacemi a hlasy?` + (c.stav === 'potvrzena' ? ' Janě se vrátí dovolená.' : ''))) return;
     proved(async () => {
       await api.smazCestu(c.id);
       stav.cesty = stav.cesty.filter(x => x.id !== c.id);
-      stav.hlasy = stav.hlasy.filter(h => h.cesta_id !== c.id);
+      const ids = new Set(stav.destinace.filter(d => d.cesta_id === c.id).map(d => d.id));
+      stav.destinace = stav.destinace.filter(d => d.cesta_id !== c.id);
+      stav.hlasy = stav.hlasy.filter(h => !ids.has(h.destinace_id));
       stav.volno = stav.volno.filter(v => v.cesta_id !== c.id);
     }, 'Smazáno');
   }
-  else if (a === 'potvrdit') {
-    const c = najdi(stav.cesty, id);
+  else if (a === 'vybrat') {
+    const c = najdi(stav.cesty, id), d = najdi(stav.destinace, el.dataset.did);
+    const nazev = d.zeme + (d.detail ? ' – ' + d.detail : '');
     const j = janaPotrebuje(c.zacatek, c.konec);
-    if (!await potvrd(`Potvrdit cestu „${c.destinace}" (${fmtRozsah(c.zacatek, c.konec)})?\nJaně se zapíše ${j} ${dniSlovo(j)} dovolené.`)) return;
-    proved(() => zmenStavCesty(c, 'potvrzena'), 'Cesta potvrzena 🎉');
+    if (!await potvrd(`Potvrdit cestu: ${nazev}, ${fmtRozsah(c.zacatek, c.konec)}?\nJaně se zapíše ${j} ${dniSlovo(j)} dovolené.`)) return;
+    proved(() => zmenStavCesty(c, 'potvrzena', nazev), 'Cesta potvrzena 🎉');
   }
   else if (a === 'zamitnout') proved(() => zmenStavCesty(najdi(stav.cesty, id), 'zamitnuta'));
   else if (a === 'vratit') proved(() => zmenStavCesty(najdi(stav.cesty, id), 'navrh'));
-  else if (a === 'hlas') {
-    const cid = Number(id), n = Number(el.dataset.n);
-    const kom = app.querySelector(`input[data-akce="komentar"][data-id="${id}"]`)?.value.trim() || '';
+  else if (a === 'pridat-destinaci') otevriDestinaci(Number(id));
+  else if (a === 'upravit-destinaci') { const d = najdi(stav.destinace, el.dataset.did); otevriDestinaci(d.cesta_id, d); }
+  else if (a === 'smazat-destinaci') {
+    const d = najdi(stav.destinace, el.dataset.did);
+    if (!await potvrd(`Smazat tvůj návrh ${d.zeme} i s jeho hlasy?`)) return;
     proved(async () => {
-      const h = await api.hlasuj(cid, n, kom);
-      stav.hlasy = stav.hlasy.filter(x => !(x.cesta_id === cid && osobaZeJmena(x.kdo) === stav.ja.key)).concat(h);
+      await api.smazDestinaci(d.id);
+      stav.destinace = stav.destinace.filter(x => x.id !== d.id);
+      stav.hlasy = stav.hlasy.filter(h => h.destinace_id !== d.id);
+    }, 'Smazáno');
+  }
+  else if (a === 'hlas') {
+    const did = Number(el.dataset.did), n = Number(el.dataset.n);
+    proved(async () => {
+      const h = await api.hlasuj(did, n);
+      stav.hlasy = stav.hlasy.filter(x => !(x.destinace_id === did && osobaZeJmena(x.kdo) === stav.ja.key)).concat(h);
     });
   }
   else if (a === 'pridat-volno') otevriVolno(null, { osoba: el.dataset.osoba, typ: el.dataset.typ });
@@ -1217,16 +1336,6 @@ app.addEventListener('change', (e) => {
   else if (a === 'narok-input') {
     const n = Math.max(0, Math.round(Number(el.value) || 0));
     proved(async () => { await api.ulozNastaveni('jana_narok', n); stav.nastaveni.jana_narok = n; }, 'Uloženo');
-  }
-  else if (a === 'komentar') {
-    // komentář se uloží s hlasem; když už hlas existuje, uloží se hned
-    const cid = Number(el.dataset.id);
-    const muj = stav.hlasy.find(h => h.cesta_id === cid && osobaZeJmena(h.kdo) === stav.ja.key);
-    if (!muj) { toast('Komentář se uloží, až dáš hvězdičky.'); return; }
-    proved(async () => {
-      const h = await api.hlasuj(cid, muj.hodnoceni, el.value.trim());
-      stav.hlasy = stav.hlasy.filter(x => x !== muj).concat(h);
-    }, 'Komentář uložen');
   }
 });
 
