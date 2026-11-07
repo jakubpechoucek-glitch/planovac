@@ -225,7 +225,7 @@
     .moje { border: 1px dashed #d1d5db; background: var(--card); }
 
     /* ── Dialog ── */
-    dialog { border: none; border-radius: 14px; padding: 0; width: min(440px, calc(100vw - 32px)); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+    dialog { margin: auto; border: none; border-radius: 14px; padding: 0; width: min(440px, calc(100vw - 32px)); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
     dialog::backdrop { background: rgba(17,24,39,.4); }
     dialog form { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
     dialog h3 { font-size: 1rem; }
@@ -316,6 +316,17 @@
     <div class="actions">
       <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
       <button type="submit" class="btn primary" value="ok">Uložit</button>
+    </div>
+  </form>
+</dialog>
+<!-- ── Dialog: potvrzení (místo confirm(), který prohlížeč umí potichu zablokovat) ── -->
+<dialog id="dlg-potvrd">
+  <form method="dialog">
+    <h3>Opravdu?</h3>
+    <p id="potvrd-text" style="font-size:.9rem;white-space:pre-line"></p>
+    <div class="actions">
+      <button type="submit" class="btn ghost" value="ne">Zrušit</button>
+      <button type="submit" class="btn primary" value="ano" id="potvrd-ano">Ano</button>
     </div>
   </form>
 </dialog>
@@ -448,6 +459,8 @@ const api = DEMO ? (() => {
 })() : (() => {
   const db = () => RodinaAuth.client;
   const ok = ({ data, error }) => { if (error) throw error; return data; };
+  // delete vrátí smazané řádky; prázdný výsledek = nic se nesmazalo (např. chybí oprávnění)
+  const smazano = (r) => { if (!ok(r)?.length) throw new Error('Záznam se v databázi nesmazal.'); };
   return {
     async nacti() {
       const [v, s, c, h, n] = await Promise.all([
@@ -462,12 +475,12 @@ const api = DEMO ? (() => {
     },
     async pridejVolno(r) { return ok(await db().from('plan_volno').insert(r).select().single()); },
     async upravVolno(id, r) { return ok(await db().from('plan_volno').update(r).eq('id', id).select().single()); },
-    async smazVolno(id) { ok(await db().from('plan_volno').delete().eq('id', id)); },
+    async smazVolno(id) { smazano(await db().from('plan_volno').delete().eq('id', id).select('id')); },
     async pridejSvatek(r) { return ok(await db().from('plan_svatky').insert(r).select().single()); },
-    async smazSvatek(id) { ok(await db().from('plan_svatky').delete().eq('id', id)); },
+    async smazSvatek(id) { smazano(await db().from('plan_svatky').delete().eq('id', id).select('id')); },
     async pridejCestu(r) { return ok(await db().from('plan_cesty').insert(r).select().single()); },
     async upravCestu(id, r) { return ok(await db().from('plan_cesty').update(r).eq('id', id).select().single()); },
-    async smazCestu(id) { ok(await db().from('plan_cesty').delete().eq('id', id)); },
+    async smazCestu(id) { smazano(await db().from('plan_cesty').delete().eq('id', id).select('id')); },
     async hlasuj(cesta_id, hodnoceni, komentar) {
       // kdo = přihlášený člen, nastaví ho server
       return ok(await db().from('plan_hlasy')
@@ -956,6 +969,15 @@ async function proved(fn, hlaska) {
   catch (e) { console.error(e); toast('Nepovedlo se: ' + (e.message || e), true); }
   prekresli();
 }
+// potvrzovací okno → Promise<boolean>
+const dlgPotvrd = document.getElementById('dlg-potvrd');
+function potvrd(text) {
+  document.getElementById('potvrd-text').textContent = text;
+  dlgPotvrd.returnValue = '';
+  dlgPotvrd.showModal();
+  document.getElementById('potvrd-ano').focus();
+  return new Promise((ok) => dlgPotvrd.addEventListener('close', () => ok(dlgPotvrd.returnValue === 'ano'), { once: true }));
+}
 const najdi = (seznam, id) => seznam.find(x => String(x.id) === String(id));
 
 // dialog volna
@@ -1078,7 +1100,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   window.scrollTo(0, 0);
 });
 
-app.addEventListener('click', (e) => {
+app.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-akce]');
   if (!el || el.tagName === 'SELECT' || el.tagName === 'INPUT') return;
   const a = el.dataset.akce, id = el.dataset.id;
@@ -1088,7 +1110,7 @@ app.addEventListener('click', (e) => {
   else if (a === 'upravit-cestu') otevriCestu(najdi(stav.cesty, id));
   else if (a === 'smazat-cestu') {
     const c = najdi(stav.cesty, id);
-    if (!confirm(`Smazat cestu „${c.destinace}" i se všemi hlasy?` + (c.stav === 'potvrzena' ? ' Janě se vrátí dovolená.' : ''))) return;
+    if (!await potvrd(`Smazat cestu „${c.destinace}" i se všemi hlasy?` + (c.stav === 'potvrzena' ? ' Janě se vrátí dovolená.' : ''))) return;
     proved(async () => {
       await api.smazCestu(c.id);
       stav.cesty = stav.cesty.filter(x => x.id !== c.id);
@@ -1099,7 +1121,7 @@ app.addEventListener('click', (e) => {
   else if (a === 'potvrdit') {
     const c = najdi(stav.cesty, id);
     const j = janaPotrebuje(c.zacatek, c.konec);
-    if (!confirm(`Potvrdit cestu „${c.destinace}" (${fmtRozsah(c.zacatek, c.konec)})?\nJaně se zapíše ${j} ${dniSlovo(j)} dovolené.`)) return;
+    if (!await potvrd(`Potvrdit cestu „${c.destinace}" (${fmtRozsah(c.zacatek, c.konec)})?\nJaně se zapíše ${j} ${dniSlovo(j)} dovolené.`)) return;
     proved(() => zmenStavCesty(c, 'potvrzena'), 'Cesta potvrzena 🎉');
   }
   else if (a === 'zamitnout') proved(() => zmenStavCesty(najdi(stav.cesty, id), 'zamitnuta'));
@@ -1116,13 +1138,13 @@ app.addEventListener('click', (e) => {
   else if (a === 'upravit-volno') otevriVolno(najdi(stav.volno, id));
   else if (a === 'smazat-volno') {
     const r = najdi(stav.volno, id);
-    if (!confirm(`Smazat „${r.popis || TYPY[r.typ]}" (${OSOBA[r.osoba].jmeno}, ${fmtRozsah(r.zacatek, r.konec)})?`)) return;
+    if (!await potvrd(`Smazat „${r.popis || TYPY[r.typ]}" (${OSOBA[r.osoba].jmeno}, ${fmtRozsah(r.zacatek, r.konec)})?`)) return;
     proved(async () => { await api.smazVolno(r.id); stav.volno = stav.volno.filter(x => x.id !== r.id); }, 'Smazáno');
   }
   else if (a === 'pridat-svatek') { formSvatek.reset(); dlgSvatek.showModal(); }
   else if (a === 'smazat-svatek') {
     const s = najdi(stav.svatky, id);
-    if (!confirm(`Smazat svátek „${s.nazev}" (${fmt(s.datum)})?`)) return;
+    if (!await potvrd(`Smazat svátek „${s.nazev}" (${fmt(s.datum)})?`)) return;
     proved(async () => { await api.smazSvatek(s.id); stav.svatky = stav.svatky.filter(x => x.id !== s.id); }, 'Smazáno');
   }
   else if (a === 'narok') { stav.view = 'upravy'; prekresli(); app.querySelector('[data-akce="narok-input"]')?.focus(); }
