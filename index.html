@@ -128,8 +128,8 @@
 
     /* ── Roční přehled ── */
     .months { display: flex; flex-direction: column; gap: 18px; }
-    .month h3 { font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
-    .month .scroll { overflow-x: auto; }
+    .month h3 { font-size: .85rem; font-weight: 700; margin-bottom: 0; }
+    .month .scroll { overflow-x: auto; padding: 12px 3px 4px; }
     .grid {
       display: grid;
       grid-template-columns: 64px repeat(var(--dni), minmax(18px, 1fr));
@@ -149,9 +149,23 @@
     .cell.jana  { background: var(--jana); }
     .cell.jakub { background: var(--jakub); }
     .cell.spolecne { background: var(--spolecne); }
-    .cell.cesta { background: var(--cesta); }
+    .cell.rodcesta { background: var(--cesta); }
     .cell.dovolena { background: repeating-linear-gradient(45deg, var(--jana), var(--jana) 3px, #f9a8d4 3px, #f9a8d4 6px); }
     .cell.prazdna { background: transparent; }
+    .cell.sluzebni { background: repeating-linear-gradient(-45deg, #374151 0 3px, #d1d5db 3px 6px); }
+    .cell.pryc { background-color: var(--b); background-image: radial-gradient(#fff 1.2px, transparent 1.6px); background-size: 6px 6px; }
+    .grid { position: relative; }
+    .ramecek {
+      position: absolute; inset: -3px -2px; pointer-events: none;
+      border: 2px solid var(--spolecne); border-radius: 6px;
+    }
+    .ramecek.l { border-left-style: dashed; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    .ramecek.r { border-right-style: dashed; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .ramecek::after {
+      content: attr(data-n); position: absolute; top: -10px; right: 2px;
+      background: var(--spolecne); color: #fff; font-size: .6rem; font-weight: 700;
+      padding: 0 5px; border-radius: 999px; line-height: 14px; white-space: nowrap;
+    }
 
     /* ── Karty / KPI ── */
     .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -272,10 +286,12 @@
       <select name="typ">
         <option value="skola">Školní prázdniny / volno ve škole</option>
         <option value="dovolena">Dovolená (Jana)</option>
+        <option value="sluzebni">Služební cesta – pracovně pryč</option>
+        <option value="cesta">Cesta jinam – volno, ale pryč (např. Matěj do Čech)</option>
         <option value="jine">Jiné volno</option>
       </select>
     </label>
-    <label>Popis <input name="popis" placeholder="např. Podzimní prázdniny"></label>
+    <label>Popis / kam <input name="popis" placeholder="např. Podzimní prázdniny, Singapur – konference, Praha"></label>
     <div class="hint" id="volno-hint"></div>
     <div class="actions">
       <button type="button" class="btn ghost" data-zavrit>Zrušit</button>
@@ -339,7 +355,9 @@ const OSOBY = [
 const OSOBA = Object.fromEntries(OSOBY.map(o => [o.key, o]));
 // kdo jede na cestu: Jana, Jakub a Lukáš (Matěj se přidá, když má volno)
 const RODINA_DOMA = ['jana', 'jakub', 'lukas'];
-const TYPY = { skola: 'Škola', dovolena: 'Dovolená', cesta: 'Cesta', jine: 'Jiné volno' };
+const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Cesta jinam', jine: 'Jiné volno' };
+// sluzebni: pracovně pryč, není volno; cesta: volno, ale pryč (např. Matěj v Čechách)
+const TYPY_PRYC = ['sluzebni', 'cesta'];
 const MESICE = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
 const DNY = ['ne','po','út','st','čt','pá','so'];
 
@@ -385,6 +403,10 @@ function demoData() {
     );
   }
   volno.push(v('jana', d(y + 1, 3, 22), d(y + 1, 3, 24), 'dovolena', 'Cesta: Bohol'));
+  volno.push(v('jana', d(y, 11, 16), d(y, 11, 19), 'sluzebni', 'Singapur – konference'));
+  volno.push(v('jana', d(y + 1, 2, 8), d(y + 1, 2, 12), 'sluzebni', 'Ho Či Minovo Město'));
+  volno.push(v('matej', d(y + 1, 2, 15), d(y + 1, 2, 19), 'skola', 'Reading week'));
+  volno.push(v('matej', d(y + 1, 2, 13), d(y + 1, 2, 21), 'cesta', 'Praha – babička a děda'));
   const svatky = [];
   for (const yy of [y, y + 1, y + 2]) {
     for (const [m, dd, n] of [[1, 1, 'Nový rok'], [5, 1, 'Svátek práce'], [6, 12, 'Den nezávislosti'], [11, 1, 'Všech svatých'], [11, 30, 'Bonifacio Day'], [12, 8, 'Neposkvrněné početí'], [12, 25, 'Vánoce'], [12, 30, 'Rizal Day'], [12, 31, 'Silvestr']]) {
@@ -482,12 +504,15 @@ const svatek = (s) => idx.svatky.get(s);
 // pracovní den Jany: všední den, který není svátek
 const pracovniDen = (s) => !jeVikend(s) && !svatek(s);
 
-// Stav osoby v daný den: { volno, silne (zapsané volno), typ, duvod }
+// Stav osoby v daný den: { volno, silne (zapsané volno), pryc (je jinde), typ, duvod }
 function stavDne(o, s) {
   const z = idx.zaznamy[o]?.get(s);
   if (z?.length) {
+    const duvod = z.map(r => (TYPY_PRYC.includes(r.typ) ? TYPY[r.typ] + ': ' : '') + (r.popis || TYPY[r.typ])).join(', ');
+    if (z.some(r => r.typ === 'sluzebni')) return { volno: false, pryc: true, silne: true, typ: 'sluzebni', duvod };
+    if (z.some(r => r.typ === 'cesta')) return { volno: true, pryc: true, silne: true, typ: 'cesta', duvod };
     const typ = z.some(r => r.typ === 'dovolena') ? 'dovolena' : z[0].typ;
-    return { volno: true, silne: true, typ, duvod: z.map(r => r.popis || TYPY[r.typ]).join(', ') };
+    return { volno: true, silne: true, typ, duvod };
   }
   if (!OSOBA[o].vikendy) return { volno: false };
   if (o === 'jakub' && s >= jakubVolnoOd()) return { volno: true, silne: false, duvod: 'bez práce' };
@@ -496,6 +521,8 @@ function stavDne(o, s) {
   return { volno: false };
 }
 const jeVolno = (o, s) => stavDne(o, s).volno;
+// může jet s rodinou: má volno a není pryč (služební cesta, cesta jinam)
+const jeDostupny = (o, s) => { const st = stavDne(o, s); return st.volno && !st.pryc; };
 
 // Kolik pracovních dnů dovolené by Jana čerpala v rozsahu (bez dnů, kdy už dovolenou má)
 function janaPotrebuje(a, b, ignorovatCestu = null) {
@@ -526,14 +553,19 @@ function spolecnaOkna(od, doDne, minDelka) {
   let start = null;
   const uzavri = (konec) => {
     if (start && pocetDni(start, konec) >= minDelka) {
-      let matej = 0, jana = 0;
-      for (const s of dny(start, konec)) { if (jeVolno('matej', s)) matej++; if (jeVolno('jana', s)) jana++; }
-      okna.push({ zacatek: start, konec, delka: pocetDni(start, konec), janaDov: janaPotrebuje(start, konec), janaVolno: jana, matej });
+      let matej = 0, matejPryc = 0, janaSluzebne = 0;
+      for (const s of dny(start, konec)) {
+        const m = stavDne('matej', s);
+        if (m.volno && !m.pryc) matej++;
+        if (m.volno && m.pryc) matejPryc++;
+        if (stavDne('jana', s).typ === 'sluzebni') janaSluzebne++;
+      }
+      okna.push({ zacatek: start, konec, delka: pocetDni(start, konec), janaDov: janaPotrebuje(start, konec), janaSluzebne, matej, matejPryc });
     }
     start = null;
   };
   for (const s of dny(od, doDne)) {
-    if (jeVolno('lukas', s) && jeVolno('jakub', s)) { if (!start) start = s; }
+    if (jeDostupny('lukas', s) && jeDostupny('jakub', s)) { if (!start) start = s; }
     else if (start) uzavri(plus(s, -1));
   }
   if (start) uzavri(doDne);
@@ -568,10 +600,26 @@ function viewPrehled() {
   const potvrzene = stav.cesty.filter(c => c.stav === 'potvrzena');
   const cestaVDen = (s) => potvrzene.find(c => s >= c.zacatek && s <= c.konec);
 
+  // společné volno (Jana + Jakub + Lukáš doma a volní) – úseky od 3 dní dostanou rámeček
+  const konecRozsahu = (() => { const d = D(zacatek); d.setUTCMonth(d.getUTCMonth() + 12); return plus(iso(d), -1); })();
+  const spolecnyDen = (s) => RODINA_DOMA.every(o => jeDostupny(o, s));
+  const useky = [];
+  {
+    let st = null;
+    const od = plus(zacatek, -40), doDne = plus(konecRozsahu, 40);
+    for (const s of dny(od, doDne)) {
+      if (spolecnyDen(s)) { if (!st) st = s; }
+      else if (st) { useky.push([st, plus(s, -1)]); st = null; }
+    }
+    if (st) useky.push([st, doDne]);
+  }
+  const ramecky = useky.filter(([a, b]) => pocetDni(a, b) >= 3);
+
   const mesicHtml = (m1) => {
     const d = D(m1), rok = d.getUTCFullYear(), mes = d.getUTCMonth();
     const n = new Date(Date.UTC(rok, mes + 1, 0)).getUTCDate();
     const dnyM = Array.from({ length: n }, (_, i) => plus(m1, i));
+    let radku = 1 + OSOBY.length + 1;
     let h = `<div class="lbl"></div>` + dnyM.map(s => {
       const c = ['hd', jeVikend(s) && 'we', svatek(s) && 'svatek', s === DNES && 'dnes'].filter(Boolean).join(' ');
       const t = svatek(s) ? ` title="${esc(svatek(s))}"` : '';
@@ -581,28 +629,68 @@ function viewPrehled() {
       h += `<div class="lbl" style="color:${o.barva}">${o.jmeno}</div>`;
       h += dnyM.map(s => {
         const st = stavDne(o.key, s);
+        const tit = `${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}`;
+        if (st.typ === 'sluzebni') return `<div class="cell sluzebni" title="${tit}"></div>`;
+        if (st.typ === 'cesta') return `<div class="cell pryc" style="--b:${o.barva}" title="${tit}"></div>`;
         if (!st.volno) return `<div class="cell" title="${o.jmeno} ${fmt(s)}: ${o.key === 'lukas' ? 'škola' : o.key === 'matej' ? 'výuka v Londýně' : 'práce'}"></div>`;
         const cls = st.typ === 'dovolena' ? 'dovolena' : o.key + (st.silne ? '' : ' slabe');
-        return `<div class="cell ${cls}" title="${o.jmeno} ${fmt(s)}: ${esc(st.duvod)}"></div>`;
+        return `<div class="cell ${cls}" title="${tit}"></div>`;
       }).join('');
     }
     h += `<div class="lbl" style="color:var(--spolecne)">Spolu</div>`;
     h += dnyM.map(s => {
-      const vsichni = RODINA_DOMA.every(o => jeVolno(o, s));
-      const lj = jeVolno('lukas', s) && jeVolno('jakub', s);
-      if (vsichni) return `<div class="cell spolecne${jeVikend(s) || svatek(s) ? ' slabe' : ''}" title="${fmt(s)}: volno Jana, Jakub i Lukáš${jeVolno('matej', s) ? ' + Matěj' : ''}"></div>`;
-      if (lj && pracovniDen(s)) return `<div class="cell spolecne slabe" style="opacity:.12" title="${fmt(s)}: Lukáš i Jakub volno, Jana by potřebovala dovolenou"></div>`;
+      const lj = jeDostupny('lukas', s) && jeDostupny('jakub', s);
+      if (spolecnyDen(s)) return `<div class="cell spolecne${jeVikend(s) || svatek(s) ? ' slabe' : ''}" title="${fmt(s)}: volno Jana, Jakub i Lukáš${jeDostupny('matej', s) ? ' + Matěj' : ''}"></div>`;
+      if (lj && pracovniDen(s) && stavDne('jana', s).typ !== 'sluzebni') return `<div class="cell spolecne slabe" style="opacity:.12" title="${fmt(s)}: Lukáš i Jakub volno, Jana by potřebovala dovolenou"></div>`;
       return `<div class="cell prazdna"></div>`;
     }).join('');
     if (potvrzene.some(c => c.konec >= dnyM[0] && c.zacatek <= dnyM[n - 1])) {
+      radku++;
       h += `<div class="lbl" style="color:var(--cesta)">Cesty</div>`;
-      h += dnyM.map(s => { const c = cestaVDen(s); return c ? `<div class="cell cesta" title="${esc(c.destinace)}"></div>` : `<div class="cell prazdna"></div>`; }).join('');
+      h += dnyM.map(s => { const c = cestaVDen(s); return c ? `<div class="cell rodcesta" title="${esc(c.destinace)}"></div>` : `<div class="cell prazdna"></div>`; }).join('');
     }
-    return `<div class="month"><h3>${MESICE[mes]} ${rok}</h3><div class="scroll"><div class="grid" style="--dni:${n}">${h}</div></div></div>`;
+    // rámečky přes všechny řádky; useknutá strana (pokračuje v dalším/předchozím měsíci) je čárkovaná
+    for (const [a, b] of ramecky) {
+      if (b < dnyM[0] || a > dnyM[n - 1]) continue;
+      const i0 = a < dnyM[0] ? 0 : pocetDni(dnyM[0], a) - 1;
+      const i1 = b > dnyM[n - 1] ? n - 1 : pocetDni(dnyM[0], b) - 1;
+      const delka = pocetDni(a, b);
+      const cls = ['ramecek', a < dnyM[0] && 'l', b > dnyM[n - 1] && 'r'].filter(Boolean).join(' ');
+      h += `<div class="${cls}" style="grid-column:${i0 + 2}/${i1 + 3};grid-row:1/-1" data-n="${delka} ${dniSlovo(delka)}" title="Společné volno ${fmtRozsah(a, b)} (${delka} ${dniSlovo(delka)})"></div>`;
+    }
+    return `<div class="month"><h3>${MESICE[mes]} ${rok}</h3><div class="scroll"><div class="grid" style="--dni:${n};grid-template-rows:repeat(${radku},auto)">${h}</div></div></div>`;
   };
+
+  // kdo je kde: nadcházející služební cesty, cesty jinam a potvrzené rodinné cesty
+  const cestyPryc = [
+    ...stav.volno.filter(r => TYPY_PRYC.includes(r.typ) && r.konec >= DNES).map(r => ({ ...r, kdo: OSOBA[r.osoba] })),
+    ...potvrzene.filter(c => c.konec >= DNES).map(c => ({ ...c, typ: 'rodina', popis: c.destinace })),
+  ].sort((x, y) => x.zacatek.localeCompare(y.zacatek)).slice(0, 12);
+  const kdoKde = cestyPryc.map(r => {
+    const dl = pocetDni(r.zacatek, r.konec);
+    const pill = r.typ === 'sluzebni' ? '<span class="pill red">služební</span>'
+      : r.typ === 'rodina' ? '<span class="pill orange">rodinná cesta</span>' : '<span class="pill blue">cesta jinam</span>';
+    const prave = r.zacatek <= DNES ? ' · <b>právě teď</b>' : '';
+    return `<div class="item">
+      <span class="dot" style="background:${r.kdo ? r.kdo.barva : 'var(--cesta)'}"></span>
+      <div class="main"><div class="t">${r.kdo ? r.kdo.jmeno + ': ' : 'Všichni: '}${esc(r.popis || TYPY[r.typ])}</div>
+        <div class="d">${fmtRozsah(r.zacatek, r.konec)} · ${dl} ${dniSlovo(dl)}${prave}</div></div>
+      ${pill}
+      ${r.kdo && !r.cesta_id ? `<button class="btn small ghost" data-akce="upravit-volno" data-id="${r.id}">✎</button>` : ''}
+    </div>`;
+  }).join('');
 
   const posun = (n) => { const d = D(zacatek); d.setUTCMonth(d.getUTCMonth() + n); return iso(d); };
   return `
+    <div class="panel">
+      <div class="row" style="margin-bottom:6px">
+        <h2>Kdo je kde</h2><div class="spacer"></div>
+        <button class="btn small" data-akce="pridat-volno" data-osoba="jana" data-typ="sluzebni">+ Služební cesta Jany</button>
+        <button class="btn small" data-akce="pridat-volno" data-osoba="matej" data-typ="cesta">+ Cesta Matěje</button>
+      </div>
+      <div class="sub">Nadcházející služební cesty, cesty jinam (např. Matěj v Čechách přes reading week) a potvrzené rodinné cesty.</div>
+      <div class="list">${kdoKde || '<div class="empty">Žádné nadcházející cesty.</div>'}</div>
+    </div>
     <div class="panel">
       <div class="row" style="margin-bottom:12px">
         <div>
@@ -618,7 +706,10 @@ function viewPrehled() {
         ${OSOBY.map(o => `<span><i style="background:${o.barva}"></i>${o.jmeno}</span>`).join('')}
         <span><i style="background:var(--lukas);opacity:.28"></i>víkend / svátek / bez práce</span>
         <span><i class="cell dovolena" style="height:12px"></i>Janina dovolená</span>
+        <span><i class="cell sluzebni" style="height:12px"></i>služební cesta</span>
+        <span><i class="cell pryc" style="height:12px;--b:var(--matej)"></i>volno, ale jinde</span>
         <span><i style="background:var(--spolecne)"></i>volno Jana + Jakub + Lukáš</span>
+        <span><i style="border:2px solid var(--spolecne);background:none"></i>společné volno 3+ dny</span>
         <span><i style="background:var(--cesta)"></i>potvrzená cesta</span>
         <span style="color:var(--red);font-weight:700">červené datum = svátek PH</span>
       </div>
@@ -634,8 +725,10 @@ function viewOkna() {
     const janaTxt = w.janaDov === 0
       ? `<span class="pill green">Jana bez dovolené</span>`
       : `<span class="pill orange">Jana: ${w.janaDov} ${dniSlovo(w.janaDov)} dovolené</span>`;
-    const matejTxt = w.matej === w.delka ? `<span class="pill blue">Matěj celou dobu volno</span>`
-      : w.matej > 0 ? `<span class="pill grey">Matěj volno ${w.matej} z ${w.delka} dní</span>` : '';
+    const matejTxt = (w.matej === w.delka ? `<span class="pill blue">Matěj celou dobu volno</span>`
+      : w.matej > 0 ? `<span class="pill grey">Matěj volno ${w.matej} z ${w.delka} dní</span>` : '')
+      + (w.matejPryc ? `<span class="pill grey">Matěj ${w.matejPryc} ${dniSlovo(w.matejPryc)} jinde</span>` : '');
+    const sluzebneTxt = w.janaSluzebne ? `<span class="pill red">Jana ${w.janaSluzebne} ${dniSlovo(w.janaSluzebne)} na služební cestě</span>` : '';
     const popis = [...new Set([...dny(w.zacatek, w.konec)].flatMap(s => (idx.zaznamy.lukas.get(s) || []).map(r => r.popis)))].join(', ');
     return `
       <div class="okno">
@@ -643,7 +736,7 @@ function viewOkna() {
         <div class="main">
           <div class="t" style="font-weight:700">${fmtRozsah(w.zacatek, w.konec)}</div>
           <div class="d" style="font-size:.78rem;color:var(--muted);margin:2px 0 6px">${esc(popis) || 'víkend / svátky'}</div>
-          <div class="row">${janaTxt}${matejTxt}</div>
+          <div class="row">${janaTxt}${sluzebneTxt}${matejTxt}</div>
         </div>
         <button class="btn small" data-akce="navrhnout" data-od="${w.zacatek}" data-do="${w.konec}">Navrhnout cestu</button>
       </div>`;
@@ -660,7 +753,7 @@ function viewOkna() {
         </label>
       </div>
       <div class="sub">Úseky, kdy má volno Lukáš i Jakub. U každého je vidět, kolik pracovních dnů dovolené by si musela vzít Jana
-        (víkendy a filipínské svátky se nepočítají) a jestli by mohl přiletět Matěj. Jakub má volno od ${fmt(jakubVolnoOd())}.</div>
+        (víkendy a filipínské svátky se nepočítají), jestli není na služební cestě a jestli by mohl přiletět Matěj. Jakub má volno od ${fmt(jakubVolnoOd())}.</div>
       ${okna.length ? okna.map(polozka).join('') : '<div class="empty">V zapsaném období žádné takové okno není.</div>'}
     </div>`;
 }
@@ -677,8 +770,9 @@ function viewCesty() {
     const muj = ja && hl.find(h => osobaZeJmena(h.kdo) === ja.key);
     const delka = pocetDni(c.zacatek, c.konec);
     const janaDov = janaPotrebuje(c.zacatek, c.konec, c.stav === 'potvrzena' ? c.id : null);
-    const kdoNemuze = RODINA_DOMA.filter(o => o !== 'jana').filter(o => [...dny(c.zacatek, c.konec)].some(s => !jeVolno(o, s)));
-    const matejDny = [...dny(c.zacatek, c.konec)].filter(s => jeVolno('matej', s)).length;
+    const kdoNemuze = RODINA_DOMA.filter(o => o !== 'jana').filter(o => [...dny(c.zacatek, c.konec)].some(s => !jeDostupny(o, s)));
+    const janaSluzebne = [...dny(c.zacatek, c.konec)].filter(s => stavDne('jana', s).typ === 'sluzebni').length;
+    const matejDny = [...dny(c.zacatek, c.konec)].filter(s => jeDostupny('matej', s)).length;
     const stavPill = c.stav === 'potvrzena' ? '<span class="pill green">potvrzeno</span>'
       : c.stav === 'zamitnuta' ? '<span class="pill grey">zamítnuto</span>' : '<span class="pill blue">návrh</span>';
     const hlasBunky = OSOBY.map(o => {
@@ -705,6 +799,7 @@ function viewCesty() {
             <div class="info">${fmtRozsah(c.zacatek, c.konec)} · ${delka} ${dniSlovo(delka)} · navrhl(a) ${esc((c.pridal || '').split(' ')[0] || '—')}</div>
             <div class="row" style="margin-top:6px">
               ${janaDov ? `<span class="pill orange">Jana: ${janaDov} ${dniSlovo(janaDov)} dovolené</span>` : '<span class="pill green">Jana bez dovolené</span>'}
+              ${janaSluzebne ? `<span class="pill red">Jana ${janaSluzebne} ${dniSlovo(janaSluzebne)} na služební cestě</span>` : ''}
               ${kdoNemuze.map(o => `<span class="pill red">${OSOBA[o].jmeno} nemá celou dobu volno</span>`).join('')}
               ${matejDny ? `<span class="pill blue">Matěj volno ${matejDny === delka ? 'celou dobu' : matejDny + ' z ' + delka + ' dní'}</span>` : ''}
             </div>
@@ -919,7 +1014,8 @@ function napovedaCesty() {
   if (!f.zacatek.value || !f.konec.value || f.konec.value < f.zacatek.value) { hint.textContent = ''; return; }
   const n = pocetDni(f.zacatek.value, f.konec.value);
   const j = janaPotrebuje(f.zacatek.value, f.konec.value, upravovanaCesta?.id ?? null);
-  const nemuze = ['lukas', 'jakub'].filter(o => [...dny(f.zacatek.value, f.konec.value)].some(s => !jeVolno(o, s))).map(o => OSOBA[o].jmeno);
+  const nemuze = ['lukas', 'jakub'].filter(o => [...dny(f.zacatek.value, f.konec.value)].some(s => !jeDostupny(o, s))).map(o => OSOBA[o].jmeno);
+  if ([...dny(f.zacatek.value, f.konec.value)].some(s => stavDne('jana', s).typ === 'sluzebni')) nemuze.unshift('Jana (služební cesta)');
   hint.textContent = `${n} ${dniSlovo(n)} · Jana čerpá ${j} ${dniSlovo(j)} dovolené` + (nemuze.length ? ` · ${nemuze.join(' a ')} nemá celou dobu volno` : '');
 }
 formCesta.addEventListener('input', napovedaCesty);

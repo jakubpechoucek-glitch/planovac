@@ -1,6 +1,6 @@
 -- Plánovač: tabulky a pravidla přístupu
 -- V Supabase (projekt Rozcestníku unoefgbzymlwwehgzusf) aplikováno 7. 11. 2026
--- jako migrace planovac_tabulky a planovac_volno_cesta.
+-- jako migrace planovac_tabulky, planovac_volno_cesta a planovac_sluzebni_cesta (7. 11. 2026).
 -- Funkce je_clen() a moje_jmeno() a tabulka clenove pochází z Rozcestníku.
 
 -- ── Tabulky ──
@@ -57,6 +57,12 @@ create table public.plan_hlasy (
 -- vazba, aby šla zrušit spolu s cestou
 alter table public.plan_volno add column cesta_id bigint references public.plan_cesty(id) on delete cascade;
 create index plan_volno_cesta_id on public.plan_volno(cesta_id);
+
+-- migrace planovac_sluzebni_cesta: služební cesta (pracovně pryč, není volno)
+-- a cesta jinam (volno, ale pryč – např. Matěj do Čech)
+alter table public.plan_volno drop constraint plan_volno_typ_check;
+alter table public.plan_volno add constraint plan_volno_typ_check
+  check (typ in ('skola','dovolena','cesta','sluzebni','jine'));
 
 -- ── Kdo a kdy přidal/upravil – plní server podle přihlášeného člena ──
 create or replace function public.plan_audit() returns trigger

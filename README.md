@@ -10,7 +10,7 @@ Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, J
 
 | Záložka | Obsah |
 |---|---|
-| **Přehled** | 12 měsíců pod sebou, pro každou osobu řádek s vybarvenými dny volna. Plná barva = zapsané volno (prázdniny, dovolená), světlá = víkend, svátek nebo „bez práce“. Řádek **Spolu** svítí zeleně, když mají volno Jana, Jakub i Lukáš; řádek **Cesty** ukazuje potvrzené cesty. Červené datum v hlavičce = svátek na Filipínách. Najetím myší na den se ukáže důvod. Šipky posouvají o 3 měsíce. |
+| **Přehled** | Nahoře panel **Kdo je kde**: nadcházející služební cesty Jany, cesty jinam (např. Matěj v Čechách přes reading week) a potvrzené rodinné cesty, s tlačítky **+ Služební cesta Jany** a **+ Cesta Matěje**. Pod ním 12 měsíců pod sebou, pro každou osobu řádek s vybarvenými dny volna. Plná barva = zapsané volno (prázdniny, dovolená), světlá = víkend, svátek nebo „bez práce“. Řádek **Spolu** svítí zeleně, když mají volno Jana, Jakub i Lukáš a nikdo z nich není pryč; souvislé společné volno od 3 dní má zelený **rámeček** přes všechny řádky se štítkem délky (čárkovaná strana = pokračuje v sousedním měsíci). Služební cesta je šedě šrafovaná, „volno, ale jinde“ je barva osoby s tečkami; řádek **Cesty** ukazuje potvrzené cesty. Červené datum v hlavičce = svátek na Filipínách. Najetím myší na den se ukáže důvod. Šipky posouvají o 3 měsíce. |
 | **Společná volna** | Souvislé úseky (od zvolené minimální délky), kdy má volno Lukáš i Jakub. U každého je, kolik pracovních dnů dovolené by musela čerpat Jana a kolik dní z toho má volno Matěj. Tlačítko **Navrhnout cestu** předvyplní termín. |
 | **Cesty a hlasování** | Návrhy cest (destinace, odjezd, návrat, poznámka). Každý ze čtyř dá 1–5 hvězdiček a může přidat komentář. Návrhy jsou seřazené podle průměru. **Potvrdit cestu** ji zapíše do kalendáře a Janě vytvoří dovolenou; **Zamítnout** / **Vrátit mezi návrhy** ji zase zruší. |
 | **Janina dovolená** | Za vybraný rok: nárok, vyčerpáno (dny před dneškem), naplánováno, zbývá. Seznam dovolených s počtem odečtených pracovních dnů. |
@@ -19,6 +19,9 @@ Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, J
 ### Pravidla výpočtu
 
 - **Lukáš, Jana, Jakub:** volno je zapsané volno + víkendy + filipínské svátky. Jakub má navíc volno každý den od data v nastavení (`jakub_volno_od`, výchozí 1. 1. 2027).
+- **Služební cesta** (`typ = sluzebni`): osoba je pracovně pryč – není to volno ani v den, kdy by jinak bylo (víkend, svátek), a nečerpá se z ní dovolená. Do společného volna se nepočítá; u oken a návrhů cest se ukáže „Jana X dní na služební cestě“.
+- **Cesta jinam** (`typ = cesta`): osoba má volno, ale je jinde (např. Matěj u babičky v Praze přes reading week). Do společného volna se nepočítá a u oken se ukáže „Matěj X dní jinde“.
+- **Rámeček v Přehledu** = souvislý úsek alespoň 3 dnů, kdy Jana, Jakub i Lukáš mají volno a nejsou pryč (počítají se i víkendy a svátky).
 - **Matěj:** je v Londýně, takže víkendy ani filipínské svátky se mu nepočítají – volno má jen v zapsaných obdobích mimo výuku na UCL.
 - **Janina dovolená** se počítá v **pracovních dnech**: všední den, který není svátkem na Filipínách. Překrývající se záznamy se nepočítají dvakrát. Počítá se po kalendářních letech.
 - **Potvrzená cesta** vytvoří Janě záznam dovolené s vazbou `cesta_id`. Úprava termínu cesty ho posune, vrácení mezi návrhy, zamítnutí nebo smazání cesty ho odstraní. Takový záznam se needituje ručně (v seznamech je označený „z cesty“).
@@ -39,11 +42,11 @@ Společný kalendář rodiny: kdo má kdy volno (Lukáš v ISM, Matěj na UCL, J
 
 ### Data (Supabase)
 
-Data jsou v Supabase projektu Rozcestníku (`unoefgbzymlwwehgzusf`). Definice je v [`sql/01_tabulky.sql`](sql/01_tabulky.sql), počáteční data v [`sql/02_data_ism_ucl_svatky.sql`](sql/02_data_ism_ucl_svatky.sql). V Supabase jsou aplikované jako migrace `planovac_tabulky` a `planovac_volno_cesta`.
+Data jsou v Supabase projektu Rozcestníku (`unoefgbzymlwwehgzusf`). Definice je v [`sql/01_tabulky.sql`](sql/01_tabulky.sql), počáteční data v [`sql/02_data_ism_ucl_svatky.sql`](sql/02_data_ism_ucl_svatky.sql). V Supabase jsou aplikované jako migrace `planovac_tabulky`, `planovac_volno_cesta` a `planovac_sluzebni_cesta`.
 
 | Tabulka | Obsah |
 |---|---|
-| `plan_volno` | jeden řádek = volno jedné osoby od–do: `osoba` (`lukas`/`matej`/`jana`/`jakub`), `zacatek`, `konec`, `typ` (`skola`/`dovolena`/`cesta`/`jine`), `popis`, `zdroj` (ISM, UCL, ručně, cesta), `cesta_id` (jen u dovolené z potvrzené cesty), plus `pridal`/`vytvoreno`, `upravil`/`upraveno` |
+| `plan_volno` | jeden řádek = volno jedné osoby od–do: `osoba` (`lukas`/`matej`/`jana`/`jakub`), `zacatek`, `konec`, `typ` (`skola` prázdniny, `dovolena` Janina dovolená, `sluzebni` služební cesta, `cesta` cesta jinam, `jine` jiné volno), `popis`, `zdroj` (ISM, UCL, ručně, cesta), `cesta_id` (jen u dovolené z potvrzené cesty), plus `pridal`/`vytvoreno`, `upravil`/`upraveno` |
 | `plan_svatky` | `datum` (unikátní), `nazev`, `zdroj` – státní svátky na Filipínách |
 | `plan_nastaveni` | klíč–hodnota (jsonb): `jana_narok` (25), `jakub_volno_od` (`"2027-01-01"`) |
 | `plan_cesty` | návrh cesty: `destinace`, `zacatek`, `konec`, `poznamka`, `stav` (`navrh`/`potvrzena`/`zamitnuta`), plus kdo a kdy |
