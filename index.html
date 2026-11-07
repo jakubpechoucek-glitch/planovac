@@ -286,8 +286,8 @@
       <select name="typ">
         <option value="skola">Školní prázdniny / volno ve škole</option>
         <option value="dovolena">Dovolená (Jana)</option>
+        <option value="cesta">Soukromá cesta – volno, ale jinde (např. Matěj do Čech)</option>
         <option value="sluzebni">Služební cesta – pracovně pryč</option>
-        <option value="cesta">Cesta jinam – volno, ale pryč (např. Matěj do Čech)</option>
         <option value="jine">Jiné volno</option>
       </select>
     </label>
@@ -366,7 +366,7 @@ const OSOBY = [
 const OSOBA = Object.fromEntries(OSOBY.map(o => [o.key, o]));
 // kdo jede na cestu: Jana, Jakub a Lukáš (Matěj se přidá, když má volno)
 const RODINA_DOMA = ['jana', 'jakub', 'lukas'];
-const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Cesta jinam', jine: 'Jiné volno' };
+const TYPY = { skola: 'Škola', dovolena: 'Dovolená', sluzebni: 'Služební cesta', cesta: 'Soukromá cesta', jine: 'Jiné volno' };
 // sluzebni: pracovně pryč, není volno; cesta: volno, ale pryč (např. Matěj v Čechách)
 const TYPY_PRYC = ['sluzebni', 'cesta'];
 const MESICE = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
@@ -534,7 +534,7 @@ function stavDne(o, s) {
   return { volno: false };
 }
 const jeVolno = (o, s) => stavDne(o, s).volno;
-// může jet s rodinou: má volno a není pryč (služební cesta, cesta jinam)
+// může jet s rodinou: má volno a není pryč (služební nebo soukromá cesta)
 const jeDostupny = (o, s) => { const st = stavDne(o, s); return st.volno && !st.pryc; };
 
 // Kolik pracovních dnů dovolené by Jana čerpala v rozsahu (bez dnů, kdy už dovolenou má)
@@ -550,10 +550,12 @@ function janaPotrebuje(a, b, ignorovatCestu = null) {
 }
 
 // Janina čerpaná dovolená v kalendářním roce: množina pracovních dnů
+// čerpá Janinu dovolenou: dovolená a soukromá cesta (v pracovní dny)
+const jeJaninaDovolena = (r) => r.osoba === 'jana' && (r.typ === 'dovolena' || r.typ === 'cesta');
 function janaDovolenaRok(rok) {
   const dnyDov = new Set();
   for (const r of stav.volno) {
-    if (r.osoba !== 'jana' || r.typ !== 'dovolena') continue;
+    if (!jeJaninaDovolena(r)) continue;
     for (const s of dny(r.zacatek, r.konec)) if (s.startsWith(rok + '-') && pracovniDen(s)) dnyDov.add(s);
   }
   return dnyDov;
@@ -674,7 +676,7 @@ function viewPrehled() {
     return `<div class="month"><h3>${MESICE[mes]} ${rok}</h3><div class="scroll"><div class="grid" style="--dni:${n};grid-template-rows:repeat(${radku},auto)">${h}</div></div></div>`;
   };
 
-  // kdo je kde: nadcházející služební cesty, cesty jinam a potvrzené rodinné cesty
+  // kdo je kde: nadcházející soukromé a služební cesty jednotlivců a potvrzené rodinné cesty
   const cestyPryc = [
     ...stav.volno.filter(r => TYPY_PRYC.includes(r.typ) && r.konec >= DNES).map(r => ({ ...r, kdo: OSOBA[r.osoba] })),
     ...potvrzene.filter(c => c.konec >= DNES).map(c => ({ ...c, typ: 'rodina', popis: c.destinace })),
@@ -682,7 +684,7 @@ function viewPrehled() {
   const kdoKde = cestyPryc.map(r => {
     const dl = pocetDni(r.zacatek, r.konec);
     const pill = r.typ === 'sluzebni' ? '<span class="pill red">služební</span>'
-      : r.typ === 'rodina' ? '<span class="pill orange">rodinná cesta</span>' : '<span class="pill blue">cesta jinam</span>';
+      : r.typ === 'rodina' ? '<span class="pill orange">rodinná cesta</span>' : '<span class="pill blue">soukromá</span>';
     const prave = r.zacatek <= DNES ? ' · <b>právě teď</b>' : '';
     return `<div class="item">
       <span class="dot" style="background:${r.kdo ? r.kdo.barva : 'var(--cesta)'}"></span>
@@ -698,10 +700,9 @@ function viewPrehled() {
     <div class="panel">
       <div class="row" style="margin-bottom:6px">
         <h2>Kdo je kde</h2><div class="spacer"></div>
-        <button class="btn small" data-akce="pridat-volno" data-osoba="jana" data-typ="sluzebni">+ Služební cesta Jany</button>
-        <button class="btn small" data-akce="pridat-volno" data-osoba="matej" data-typ="cesta">+ Cesta Matěje</button>
+        <button class="btn small primary" data-akce="pridat-cestu-osoby">+ Přidat cestu</button>
       </div>
-      <div class="sub">Nadcházející služební cesty, cesty jinam (např. Matěj v Čechách přes reading week) a potvrzené rodinné cesty.</div>
+      <div class="sub">Nadcházející cesty jednotlivých členů rodiny – soukromé (např. Matěj v Čechách přes reading week, Jakub nebo Lukáš na výletě) i služební – a potvrzené rodinné cesty.</div>
       <div class="list">${kdoKde || '<div class="empty">Žádné nadcházející cesty.</div>'}</div>
     </div>
     <div class="panel">
@@ -857,7 +858,7 @@ function viewJana() {
   const cerpano = [...vsechny].filter(s => s < DNES).length;
   const planovano = vsechny.size - cerpano;
   const zbyva = narok - vsechny.size;
-  const zaznamy = stav.volno.filter(r => r.osoba === 'jana' && r.typ === 'dovolena' && r.zacatek <= `${janaRok}-12-31` && r.konec >= `${janaRok}-01-01`)
+  const zaznamy = stav.volno.filter(r => jeJaninaDovolena(r) && r.zacatek <= `${janaRok}-12-31` && r.konec >= `${janaRok}-01-01`)
     .sort((a, b) => a.zacatek.localeCompare(b.zacatek));
   const roky = [...new Set([janaRok - 1, janaRok, janaRok + 1, ...stav.volno.filter(r => r.osoba === 'jana').map(r => Number(r.zacatek.slice(0, 4)))])].sort();
   const pct = (n) => Math.max(0, Math.min(100, n / Math.max(narok, 1) * 100));
@@ -891,7 +892,7 @@ function viewJana() {
           const n = [...dny(r.zacatek, r.konec)].filter(s => s.startsWith(janaRok + '-') && pracovniDen(s)).length;
           return `<div class="item">
             <span class="dot" style="background:var(--jana)"></span>
-            <div class="main"><div class="t">${esc(r.popis || 'Dovolená')}</div><div class="d">${fmtRozsah(r.zacatek, r.konec)}${r.cesta_id ? ' · z potvrzené cesty' : ''}</div></div>
+            <div class="main"><div class="t">${r.typ === 'cesta' ? 'Soukromá cesta: ' : ''}${esc(r.popis || (r.typ === 'cesta' ? '' : 'Dovolená'))}</div><div class="d">${fmtRozsah(r.zacatek, r.konec)}${r.cesta_id ? ' · z potvrzené cesty' : ''}</div></div>
             <span class="pill ${r.konec < DNES ? 'blue' : 'orange'}">${n} ${dniSlovo(n)}</span>
             ${r.cesta_id ? '' : `<button class="btn small ghost" data-akce="upravit-volno" data-id="${r.id}">✎</button><button class="btn small ghost" data-akce="smazat-volno" data-id="${r.id}">🗑</button>`}
           </div>`;
@@ -987,7 +988,10 @@ formVolno.osoba.innerHTML = OSOBY.map(o => `<option value="${o.key}">${o.jmeno}<
 let upravovaneVolno = null;
 function otevriVolno(r, vychozi = {}) {
   upravovaneVolno = r;
-  document.getElementById('dlg-volno-titul').textContent = r ? 'Upravit volno' : 'Přidat volno';
+  // režim cesty: v nabídce typů jen soukromá a služební cesta
+  const rezimCesty = vychozi.cesta || (r && TYPY_PRYC.includes(r.typ));
+  for (const opt of formVolno.typ.options) opt.hidden = rezimCesty && !TYPY_PRYC.includes(opt.value);
+  document.getElementById('dlg-volno-titul').textContent = rezimCesty ? (r ? 'Upravit cestu' : 'Přidat cestu') : (r ? 'Upravit volno' : 'Přidat volno');
   const v = r || { osoba: vychozi.osoba || 'lukas', zacatek: DNES, konec: DNES, typ: vychozi.typ || (vychozi.osoba === 'jana' ? 'dovolena' : 'skola'), popis: '' };
   for (const k of ['osoba', 'zacatek', 'konec', 'typ', 'popis']) formVolno[k].value = v[k] ?? '';
   napovedaVolna();
@@ -995,9 +999,14 @@ function otevriVolno(r, vychozi = {}) {
 }
 function napovedaVolna() {
   const f = formVolno, hint = document.getElementById('volno-hint');
-  if (f.osoba.value === 'jana' && f.typ.value === 'dovolena' && f.zacatek.value && f.konec.value >= f.zacatek.value) {
+  const platne = f.zacatek.value && f.konec.value >= f.zacatek.value;
+  if (platne && f.osoba.value === 'jana' && (f.typ.value === 'dovolena' || f.typ.value === 'cesta')) {
     const n = [...dny(f.zacatek.value, f.konec.value)].filter(pracovniDen).length;
-    hint.textContent = `Odečte se ${n} ${dniSlovo(n)} dovolené (pracovní dny bez svátků).`;
+    hint.textContent = `Janě se odečte ${n} ${dniSlovo(n)} dovolené (pracovní dny bez svátků).`;
+  } else if (platne && f.typ.value === 'sluzebni') {
+    hint.textContent = 'Služební cesta není volno a dovolenou nečerpá. Do společného volna se nepočítá.';
+  } else if (platne && f.typ.value === 'cesta') {
+    hint.textContent = 'Volno, ale jinde – do společného volna rodiny se nepočítá.';
   } else hint.textContent = '';
 }
 formVolno.addEventListener('input', napovedaVolna);
@@ -1135,6 +1144,7 @@ app.addEventListener('click', async (e) => {
     });
   }
   else if (a === 'pridat-volno') otevriVolno(null, { osoba: el.dataset.osoba, typ: el.dataset.typ });
+  else if (a === 'pridat-cestu-osoby') otevriVolno(null, { osoba: stav.ja?.key || 'jana', typ: 'cesta', cesta: true });
   else if (a === 'upravit-volno') otevriVolno(najdi(stav.volno, id));
   else if (a === 'smazat-volno') {
     const r = najdi(stav.volno, id);
