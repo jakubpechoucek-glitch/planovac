@@ -293,6 +293,10 @@
       box-shadow: var(--shadow);
     }
     .bublina.vidi { display: block; }
+    /* připnutá bublina (po kliknutí) jde ovládat – odkazy na Flightradar24 */
+    .bublina.pripnuta { pointer-events: auto; }
+    .bublina a { color: #fcd34d; font-weight: 700; }
+    .bublina .napoveda { color: #9ca3af; font-size: .7rem; }
     .cell.let { position: relative; }
     .cell.let::after {
       content: '✈'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -498,7 +502,7 @@ function demoData() {
   volno.push(v('jana', d(y + 1, 2, 8), d(y + 1, 2, 12), 'sluzebni', 'Ho Či Minovo Město'));
   volno.push(v('matej', d(y + 1, 2, 15), d(y + 1, 2, 19), 'skola', 'Reading week'));
   volno.push({ ...v('matej', d(y + 1, 2, 13), d(y + 1, 2, 21), 'cesta', 'Praha – babička a děda'),
-    lety: [{ datum: d(y + 1, 2, 13), text: 'BA LHR → PRG 18:05–21:05' }, { datum: d(y + 1, 2, 21), text: 'BA PRG → LHR 11:10–12:30' }] });
+    lety: [{ datum: d(y + 1, 2, 13), text: 'BA858 LHR → PRG 18:05–21:05' }, { datum: d(y + 1, 2, 21), text: 'BA855 PRG → LHR 11:10–12:30' }] });
   const svatky = [];
   for (const yy of [y, y + 1, y + 2]) {
     for (const [m, dd, n] of [[1, 1, 'Nový rok'], [5, 1, 'Svátek práce'], [6, 12, 'Den nezávislosti'], [11, 1, 'Všech svatých'], [11, 30, 'Bonifacio Day'], [12, 8, 'Neposkvrněné početí'], [12, 25, 'Vánoce'], [12, 30, 'Rizal Day'], [12, 31, 'Silvestr']]) {
@@ -1412,8 +1416,19 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 const bublina = document.createElement('div');
 bublina.className = 'bublina';
 document.body.appendChild(bublina);
-function ukazBublinu(el) {
-  bublina.textContent = el.dataset.tip;
+// číslo letu (TG621, TK 0085, 5J 811 …) → odkaz na Flightradar24, kde je vidět, kde letadlo právě je
+const RE_LET = /\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?0*(\d{1,4})\b/g;
+const odkazyLetu = (t) => esc(t).replace(RE_LET, (m, kod, cislo) =>
+  `<a href="https://www.flightradar24.com/data/flights/${(kod + cislo).toLowerCase()}" target="_blank" rel="noopener" title="Sledovat let na Flightradar24">${m}</a>`);
+let pripnuto = false;
+function ukazBublinu(el, pripnout = false) {
+  const tip = el.dataset.tip;
+  const maLet = tip.includes('✈️');
+  bublina.innerHTML = tip.split('\n').map(r => r.startsWith('✈️') ? odkazyLetu(r) : esc(r)).join('\n')
+    + (maLet && !pripnout && RE_LET.test(tip) ? '\n<span class="napoveda">Klikni na den a pak na číslo letu → Flightradar24</span>' : '');
+  RE_LET.lastIndex = 0;
+  pripnuto = pripnout;
+  bublina.classList.toggle('pripnuta', pripnout);
   bublina.classList.add('vidi');
   const r = el.getBoundingClientRect(), b = bublina.getBoundingClientRect();
   const x = Math.max(8, Math.min(r.left + r.width / 2 - b.width / 2, innerWidth - b.width - 8));
@@ -1421,10 +1436,19 @@ function ukazBublinu(el) {
   bublina.style.left = x + 'px';
   bublina.style.top = y + 'px';
 }
-const skryjBublinu = () => bublina.classList.remove('vidi');
-app.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-tip]'); el ? ukazBublinu(el) : skryjBublinu(); });
-app.addEventListener('mouseleave', skryjBublinu);
-document.addEventListener('click', (e) => { const el = e.target.closest('[data-tip]'); el ? ukazBublinu(el) : skryjBublinu(); });
+const skryjBublinu = () => { pripnuto = false; bublina.classList.remove('vidi', 'pripnuta'); };
+// najetí myší ukáže náhled; klik (i klepnutí na mobilu) bublinu připne, dokud se neklikne jinam
+app.addEventListener('mouseover', (e) => {
+  if (pripnuto) return;
+  const el = e.target.closest('[data-tip]');
+  el ? ukazBublinu(el) : skryjBublinu();
+});
+app.addEventListener('mouseleave', () => { if (!pripnuto) skryjBublinu(); });
+document.addEventListener('click', (e) => {
+  if (bublina.contains(e.target)) return;
+  const el = e.target.closest('[data-tip]');
+  el ? ukazBublinu(el, true) : skryjBublinu();
+});
 window.addEventListener('scroll', skryjBublinu, true);
 
 app.addEventListener('click', async (e) => {
